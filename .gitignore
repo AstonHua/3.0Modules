@@ -1,41 +1,73 @@
-# Prerequisites
-*.d
+# ============================
+# 通用 CMake 忽略
+# ============================
+/build/
+/CMakeFiles/
+/CMakeCache.txt
+cmake_install.cmake
+Makefile
+compile_commands.json
 
-# Compiled Object files
-*.slo
-*.lo
+# ============================
+# 编译生成的目标文件
+# ============================
 *.o
 *.obj
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Linker files
-*.ilk
-
-# Debugger Files
-*.pdb
-
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
+*.lo
 *.la
 *.a
 *.lib
-
-# Executables
+*.so
+*.dll
+*.dylib
 *.exe
 *.out
 *.app
+*.pdb
+*.idb
 
-# debug information files
-*.dwo
+# ============================
+# Visual Studio / MSVC
+# ============================
+.vs/
+*.sln
+*.suo
+*.user
+*.userosscache
+*.sdf
+*.cachefile
+*.dbmdl
+*.VC.db
+*.VC.opendb
+
+# VS 构建产物
+*.ipch
+*.aps
+*.ncb
+*.opendb
+*.opensdf
+
+# ============================
+# IDE / 编辑器配置
+# ============================
+.idea/
+.vscode/
+*.swp
+*~
+
+# ============================
+# 其他常见生成文件
+# ============================
+*.log
+*.tmp
+*.bak
+*.manifest
+*.generated
+
+
+
+env/
+bin/
+out/
+lib/
+translations/
