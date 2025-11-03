@@ -57,6 +57,7 @@ public:
     int  LJXA_ACQ_OpenDevice(int lDeviceId, LJX8IF_ETHERNET_CONFIG* EthernetConfig, int HighSpeedPortNo);
     void LJXA_ACQ_CloseDevice(int lDeviceId);
     bool InitHighSpeed();
+    void upDateParam();
 public:
     QString RootPath;//家目录
     std::atomic_bool allowflag;
@@ -91,8 +92,9 @@ public:
     LJX8IF_ETHERNET_CONFIG EthernetConfig;//当前id设备对应ip信息
 
     //QString camera_name;    // 相机名称
-    int	recontimeout_ms = 3000;
+    //int	recontimeout_ms = 3000;
 
+    QMap<QString, QString> ParasValueMap;
 signals:
     void trigged(int);
 };
@@ -114,7 +116,7 @@ public:
     bool init();
 
     //加载示例参数
-    QJsonObject load_camera_Example();
+    QJsonObject load_JsonFile(QString);
 
     //设置数据
     //相机：第一张图的参数，QStringList：00 曝光值 增益值；
@@ -128,11 +130,11 @@ public:
     void cancelCallBackFun(PBGLOBAL_CALLBACK_FUN, QObject*, const QString&);
 
 private:
+    QString JsonFile;
     QString RootPath;
     int deviceId = 0;
     QString SnName;
     cameraFunSDKfactoryCls* m_sdkFunc = nullptr;
-    bool ifFirst = true;
     //参数设置的数据
     QMap<QString, QString> ParasValueMap;
 };
