@@ -3,9 +3,8 @@ get_filename_component(CURRENT_FOLDER ${CMAKE_CURRENT_SOURCE_DIR} NAME)
 string(TIMESTAMP RUN_TIME)
 message( " model start : " ${CURRENT_FOLDER}:${RUN_TIME})
 
-set(DLL_NAMES "keyence3D" "opencv")
-foreach(child ${DLL_NAMES})
-            
+set(DLL_NAMES "mvs" "opencv")
+foreach(child ${DLL_NAMES})         
     LIST(APPEND ENV_INCLUDE ${${child}_include})
     LIST(APPEND ENV_LIB ${${child}_lib})
     LIST(APPEND ENV_TARGET ${${child}_target_link})         
@@ -13,13 +12,14 @@ endforeach()
 message("   ENV_INCLUDE : " ${ENV_INCLUDE} )
 message("   ENV_LIB : " ${ENV_LIB} )
 message("   ENV_TARGET : " ${ENV_TARGET} )
+
 include_directories(
+
     ${ENV_INCLUDE}
     )
 
 link_directories (
     ${ENV_LIB}
-
     )
 
 
@@ -54,8 +54,7 @@ set_target_properties(${CURRENT_FOLDER} PROPERTIES LINKER_LANGUAGE C
     ARCHIVE_OUTPUT_DIRECTORY  ${CMAKE_ARCHIVE_OUTPUT_DIRECTORY}
     )
 
-
-find_package(Qt5 COMPONENTS ${qtlist} REQUIRED )
+    find_package(Qt5 COMPONENTS ${qtlist} REQUIRED )
 foreach(item ${qtlist})
     list(APPEND lib_list Qt5::${item})
 endforeach()
@@ -66,9 +65,6 @@ target_link_libraries(${CURRENT_FOLDER} PRIVATE
 
 
 # target_compile_definitions(${CURRENT_FOLDER} PRIVATE HD_AIDEMO_MODULE_LIBRARY)
-
-
-
 
 string(TIMESTAMP RUN_TIME)
 message( " model end : " ${CURRENT_FOLDER}:${RUN_TIME})

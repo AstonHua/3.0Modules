@@ -15,7 +15,7 @@
 #include "qjsonarray.h"
 #include "qjsondocument.h"
 #include "QLibrary.h"
-
+#include <qmutex.h>
 #include "LJX8_IF.h"
 #include "LJX8_ErrorCode.h"
 
@@ -38,8 +38,66 @@ typedef struct {
     float	z_pitch_um;
 } LJXA_ACQ_GETPARAM;
 
-const int MAX_LJXA_DEVICENUM = 6;
 
+
+struct CallbackFuncPack
+{
+    QObject* callbackparent;
+    PBGLOBAL_CALLBACK_FUN GetimagescallbackFunc;
+    QString cameraIndex;
+};
+class cameraFunSDKfactoryCls :public QObject
+{
+public:
+    cameraFunSDKfactoryCls();
+    ~cameraFunSDKfactoryCls();
+    bool initSdk(QMap<QString, QString>& insideValuesMaps);
+    int  LJXA_ACQ_OpenDevice(int lDeviceId, LJX8IF_ETHERNET_CONFIG* EthernetConfig, int HighSpeedPortNo);
+    int  LJXA_ACQ_StartAsync(int lDeviceId, LJXA_ACQ_SETPARAM* setParam);
+    int  LJXA_ACQ_AcquireAsync(int lDeviceId, unsigned short* heightImage, unsigned short* luminanceImage, LJXA_ACQ_SETPARAM* setParam, LJXA_ACQ_GETPARAM* getParam);
+    void LJXA_ACQ_CloseDevice(int lDeviceId);
+
+    bool decodeInitData(QByteArray byte, QVector<QByteArray>& vector_data);
+    bool InitHighSpeed();
+    int LJXA_ACQ_Acquire(int lDeviceId, unsigned short* heightImage, unsigned short* luminanceImage, LJXA_ACQ_SETPARAM* setParam, LJXA_ACQ_GETPARAM* getParam);
+    //void myCallbackFunc(LJX8IF_PROFILE_HEADER* pProfileHeaderArray, WORD* pHeightProfileArray, WORD* pLuminanceProfileArray, DWORD dwLuminanceEnable, DWORD dwProfileDataCount, DWORD dwCount, DWORD dwNotify, DWORD dwUser);
+public:
+    bool  run();
+    QVector<CallbackFuncPack> CallbackFuncVec;
+    LJX8IF_HIGH_SPEED_PRE_START_REQ* startReq_ptr = nullptr;
+    LJX8IF_PROFILE_INFO* profileInfo_ptr = nullptr;
+
+    // Static variable
+
+    QMutex* m_mutex;
+    int imgIndex = 0;
+
+    int deviceId = 0;			 // Set "0" if you use only 1 head.
+    int xImageSize = 0;			 // Number of X points.
+    int yImageSize = 0;			 // Number of Y lines.
+    float y_pitch_um = 0;		 // Data pitch of Y data. (e.g. your encoder setting)
+    int	timeout_ms = 0;		 // Timeout value for the acquiring image (in milisecond).
+    int use_external_batchStart = 1; // Set "1" if you controll the batch start timing externally. (e.g. terminal input) 0内部触发，1外部触发
+    std::string outputFilePath1 = "sample_height.csv";
+    std::string outputFilePath2 = "sample_height.tif";
+    std::string outputFilePath3 = "sample_luminance.tif";
+    unsigned short zUnit = 0;
+
+    unsigned short* heightImage = nullptr;		    // Height image
+    unsigned short* luminanceImage = nullptr;		// Luminance image
+
+    LJXA_ACQ_SETPARAM* setParam_Ptr = nullptr;
+    LJXA_ACQ_GETPARAM* getParam_Ptr = nullptr;
+    int HighSpeedPortNo = 24692;		            // Port number for high-speed communication
+    bool isopen = false;
+    int errCode;
+
+    LJX8IF_ETHERNET_CONFIG EthernetConfig;
+
+    QString camera_name;    // 相机名称
+    int	recontimeout_ms = 3000;
+    int yCounts;
+};
 class  Hd_CameraModule_3DKeyence3 :public PbGlobalObject
 {
     Q_OBJECT
@@ -69,60 +127,8 @@ public:
     bool data(std::vector<cv::Mat>&, QStringList&);
     //注册回调 string对应自身的参数协议 （自定义）
     virtual void registerCallBackFun(PBGLOBAL_CALLBACK_FUN, QObject*, const QString&);
-
-
-    //从类中读数据到实例对象
-    bool readData(std::vector<cv::Mat>& mats, QByteArray& data);
-    //实例对象把数据写入到类
-    bool writeData(std::vector<cv::Mat>& mat, QByteArray& data);
-    bool  initParas(QByteArray&);
-    bool  run();
-
-    int  LJXA_ACQ_OpenDevice(int lDeviceId, LJX8IF_ETHERNET_CONFIG* EthernetConfig, int HighSpeedPortNo);
-    int  LJXA_ACQ_StartAsync(int lDeviceId, LJXA_ACQ_SETPARAM* setParam);
-    int  LJXA_ACQ_AcquireAsync(int lDeviceId, unsigned short* heightImage, unsigned short* luminanceImage, LJXA_ACQ_SETPARAM* setParam, LJXA_ACQ_GETPARAM* getParam);
-    void LJXA_ACQ_CloseDevice(int lDeviceId);
-
-    bool decodeInitData(QByteArray byte,QVector<QByteArray> &vector_data);
-    bool InitHighSpeed();
 private:
-    int LJXA_ACQ_Acquire(int lDeviceId, unsigned short* heightImage, unsigned short* luminanceImage, LJXA_ACQ_SETPARAM* setParam, LJXA_ACQ_GETPARAM* getParam);
-    LJX8IF_HIGH_SPEED_PRE_START_REQ  *startReq_ptr    = nullptr;
-    LJX8IF_PROFILE_INFO              *profileInfo_ptr = nullptr;
-
-    // Static variable
-    LJX8IF_ETHERNET_CONFIG _ethernetConfig[MAX_LJXA_DEVICENUM];
-    int _highSpeedPortNo[MAX_LJXA_DEVICENUM];
-
-    LJXA_ACQ_GETPARAM _getParam[MAX_LJXA_DEVICENUM];
-
-    int deviceId   = 0;			 // Set "0" if you use only 1 head.
-    int xImageSize = 0;			 // Number of X points.
-    int yImageSize = 0;			 // Number of Y lines.
-    float y_pitch_um = 0;		 // Data pitch of Y data. (e.g. your encoder setting)
-    int	timeout_ms   = 0;		 // Timeout value for the acquiring image (in milisecond).
-    int use_external_batchStart = 1; // Set "1" if you controll the batch start timing externally. (e.g. terminal input) 0内部触发，1外部触发
-    std::string outputFilePath1 = "sample_height.csv";
-    std::string outputFilePath2 = "sample_height.tif";
-    std::string outputFilePath3 = "sample_luminance.tif";
-
-    //std::vector< cv::Mat>  vector_mat;
-    unsigned short zUnit = 0;
-
-    unsigned short* heightImage = nullptr;		    // Height image
-    unsigned short* luminanceImage = nullptr;		// Luminance image
-
-    LJXA_ACQ_SETPARAM *setParam_Ptr = nullptr;
-    LJXA_ACQ_GETPARAM *getParam_Ptr = nullptr;
-    int HighSpeedPortNo = 24692;		            // Port number for high-speed communication
-    bool isopen = false;
-    int errCode;
-
-    LJX8IF_ETHERNET_CONFIG EthernetConfig;
-
-    QString camera_name;    // 相机名称
-    int	recontimeout_ms = 3000; 
-private:
+    cameraFunSDKfactoryCls* m_sdkFunc = nullptr;
     bool ifFirst = true;
     //参数设置的数据
     QMap<QString, QString> ParasValueMap;
@@ -131,8 +137,13 @@ private:
 
 extern "C"
 {
-   Q_DECL_EXPORT Hd_CameraModule_3DKeyence3 * create(int type = -1);
-   Q_DECL_EXPORT void destory(Hd_CameraModule_3DKeyence3 * ptr);
+    Q_DECL_EXPORT bool create(const QString& DeviceSn, const QString& name, const QString& path);
+    Q_DECL_EXPORT void destroy(const QString& name);
+    Q_DECL_EXPORT QWidget* getCameraWidgetPtr(const QString& name);
+    Q_DECL_EXPORT PbGlobalObject* getCameraPtr(const QString& name);
+    Q_DECL_EXPORT QStringList getCameraSnList();
+    //Q_DECL_EXPORT Hd_25DCameraVJ_module * create(int type = -1);
+    //Q_DECL_EXPORT void destory(Hd_25DCameraVJ_module * ptr);
 }
 
 #endif // HD_MVCAMERA_MODULE_H
