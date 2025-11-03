@@ -18,7 +18,8 @@
 #include <qmutex.h>
 #include "LJX8_IF.h"
 #include "LJX8_ErrorCode.h"
-
+#include <ThreadSafeQueue.h>
+const int MAX_LJXA_DEVICENUM = 6;
 #pragma comment(lib, "winmm.lib")
 #pragma execution_character_set("utf-8")
 
@@ -48,29 +49,26 @@ struct CallbackFuncPack
 };
 class cameraFunSDKfactoryCls :public QObject
 {
+    Q_OBJECT
 public:
-    cameraFunSDKfactoryCls();
+    cameraFunSDKfactoryCls(int DevicedID, QObject* parent);
     ~cameraFunSDKfactoryCls();
     bool initSdk(QMap<QString, QString>& insideValuesMaps);
     int  LJXA_ACQ_OpenDevice(int lDeviceId, LJX8IF_ETHERNET_CONFIG* EthernetConfig, int HighSpeedPortNo);
-    int  LJXA_ACQ_StartAsync(int lDeviceId, LJXA_ACQ_SETPARAM* setParam);
-    int  LJXA_ACQ_AcquireAsync(int lDeviceId, unsigned short* heightImage, unsigned short* luminanceImage, LJXA_ACQ_SETPARAM* setParam, LJXA_ACQ_GETPARAM* getParam);
     void LJXA_ACQ_CloseDevice(int lDeviceId);
-
-    bool decodeInitData(QByteArray byte, QVector<QByteArray>& vector_data);
     bool InitHighSpeed();
-    int LJXA_ACQ_Acquire(int lDeviceId, unsigned short* heightImage, unsigned short* luminanceImage, LJXA_ACQ_SETPARAM* setParam, LJXA_ACQ_GETPARAM* getParam);
-    //void myCallbackFunc(LJX8IF_PROFILE_HEADER* pProfileHeaderArray, WORD* pHeightProfileArray, WORD* pLuminanceProfileArray, DWORD dwLuminanceEnable, DWORD dwProfileDataCount, DWORD dwCount, DWORD dwNotify, DWORD dwUser);
 public:
+    std::atomic_bool allowflag;
+    ThreadSafeQueue<cv::Mat> heightMatS;//高度图
+    ThreadSafeQueue<cv::Mat> luminanceMatS;//灰度图
+    QObject* parent = nullptr;
     bool  run();
     QVector<CallbackFuncPack> CallbackFuncVec;
     LJX8IF_HIGH_SPEED_PRE_START_REQ* startReq_ptr = nullptr;
     LJX8IF_PROFILE_INFO* profileInfo_ptr = nullptr;
 
     // Static variable
-
-    QMutex* m_mutex;
-    int imgIndex = 0;
+    int Currentindex = 0;
 
     int deviceId = 0;			 // Set "0" if you use only 1 head.
     int xImageSize = 0;			 // Number of X points.
@@ -78,9 +76,6 @@ public:
     float y_pitch_um = 0;		 // Data pitch of Y data. (e.g. your encoder setting)
     int	timeout_ms = 0;		 // Timeout value for the acquiring image (in milisecond).
     int use_external_batchStart = 1; // Set "1" if you controll the batch start timing externally. (e.g. terminal input) 0内部触发，1外部触发
-    std::string outputFilePath1 = "sample_height.csv";
-    std::string outputFilePath2 = "sample_height.tif";
-    std::string outputFilePath3 = "sample_luminance.tif";
     unsigned short zUnit = 0;
 
     unsigned short* heightImage = nullptr;		    // Height image
@@ -92,17 +87,19 @@ public:
     bool isopen = false;
     int errCode;
 
-    LJX8IF_ETHERNET_CONFIG EthernetConfig;
+    LJX8IF_ETHERNET_CONFIG EthernetConfig;//当前id设备对应ip信息
 
     QString camera_name;    // 相机名称
     int	recontimeout_ms = 3000;
-    int yCounts;
+
+signals:
+    void trigged(int);
 };
 class  Hd_CameraModule_3DKeyence3 :public PbGlobalObject
 {
     Q_OBJECT
 public:
-    explicit Hd_CameraModule_3DKeyence3(int settype = -1, QObject* parent = nullptr);//对应哪个品牌相机(触发方式)/通信
+    explicit Hd_CameraModule_3DKeyence3(int DevicedID,int settype = -1, QObject* parent = nullptr);//对应哪个品牌相机(触发方式)/通信
     ~Hd_CameraModule_3DKeyence3();
     //#######################通用函数#######################
     //初始化参数；通信/相机的初始化参数
@@ -128,11 +125,13 @@ public:
     //注册回调 string对应自身的参数协议 （自定义）
     virtual void registerCallBackFun(PBGLOBAL_CALLBACK_FUN, QObject*, const QString&);
 private:
+
+    int deviceId = 0;
+    QString SnName;
     cameraFunSDKfactoryCls* m_sdkFunc = nullptr;
     bool ifFirst = true;
     //参数设置的数据
     QMap<QString, QString> ParasValueMap;
-    QString getmoduleName();
 };
 
 extern "C"

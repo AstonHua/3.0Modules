@@ -82,10 +82,8 @@ public:
     void registerCallBackFun(PBGLOBAL_CALLBACK_FUN, QObject*, const QString&);
     //注销回调 string对应自身的参数协议 （自定义）--->注销后还得取消连接状态
     void cancelCallBackFun(PBGLOBAL_CALLBACK_FUN, QObject*, const QString&);
-    int SearchDevice();
 
     QJsonObject load_camera_Example();
-    QString getmoduleName();
     QString Sncode;
     cameraFunSDKfactoryCls* m_sdkFunc =nullptr;
     QMap<QString, QString> ParasValueMap;
