@@ -351,13 +351,13 @@ void cameraFunSDKfactoryCls::LJXA_ACQ_CloseDevice(int lDeviceId)
 	qDebug() << __FUNCTION__ << " line:" << __LINE__ << "  Close device!";
 }
 
-Hd_CameraModule_3DKeyence3::Hd_CameraModule_3DKeyence3(int DevicedID, QString RootPath, int settype, QObject* parent) : PbGlobalObject(settype, parent), deviceId(DevicedID)
+Hd_CameraModule_3DKeyence3::Hd_CameraModule_3DKeyence3(int DevicedID, QString RootPath, int settype, QObject* parent) : 
+	PbGlobalObject(settype, parent), deviceId(DevicedID), RootPath(RootPath)
 {
 	famliy = PGOFAMLIY::CAMERA3D;
 	CHAR* pControllerSerialNo = nullptr; CHAR* pHeadSerialNo = nullptr;
 	LJX8IF_GetSerialNumber(DevicedID, pControllerSerialNo, pHeadSerialNo);
 	SnName = pHeadSerialNo;
-	RootPath = RootPath + "/Hd_CameraModule_3DKeyence3/";
 	JsonFile = RootPath + SnName + ".json";
 	if (!QFile(JsonFile).exists())
 		createAndWritefile(JsonFile, FirstCreateByte);
@@ -457,8 +457,7 @@ bool Hd_CameraModule_3DKeyence3::init()
 		if (Code == 1000)
 		{
 			m_sdkFunc->Currentindex = 0;
-			m_sdkFunc->heightMatS.clear();
-			m_sdkFunc->luminanceMatS.clear();
+			m_sdkFunc->ImageMats.clear();
 			m_sdkFunc->allowflag.store(true, std::memory_order::memory_order_release);
 		}
 		else if (Code == 1001)
@@ -491,13 +490,18 @@ bool Hd_CameraModule_3DKeyence3::init()
 
 bool Hd_CameraModule_3DKeyence3::setData(const std::vector<cv::Mat>& mats, const QStringList& data)
 {
-
-
-	return true;
+	return m_sdkFunc->run();
 }
 //获取数据
 bool Hd_CameraModule_3DKeyence3::data(std::vector<cv::Mat>& ImgS, QStringList& QStringListdata)
 {
+	m_sdkFunc->ImageMats.wait_for_pop(3000, ImgS);
+	if (ImgS.empty())
+	{
+		ImgS.push_back(cv::Mat::zeros(100, 100, 0));
+		qCritical() << __FUNCTION__ << "   line:" << __LINE__ << " srcImage is null";
+		return false;
+	}
 	return true;
 }
 bool cameraFunSDKfactoryCls::InitHighSpeed()
@@ -701,8 +705,10 @@ bool cameraFunSDKfactoryCls::run()
 		//qDebug() << __FUNCTION__ << " line:" << __LINE__ << " Free memory Finished: ";
 		if (allowflag.load(std::memory_order::memory_order_acquire))
 		{
-			luminanceMatS.push(cv::Mat(yImageSize, xImageSize, CV_16U, luminanceImage));
-			heightMatS.push(cv::Mat(yImageSize, xImageSize, CV_16U, heightImage));
+			vector<cv::Mat> Getimagevector;
+			Getimagevector.push_back(cv::Mat(yImageSize, xImageSize, CV_16U, luminanceImage));
+			Getimagevector.push_back(cv::Mat(yImageSize, xImageSize, CV_16U, heightImage));
+			ImageMats.push(Getimagevector);
 			qDebug() << __FUNCTION__ << " line:" << __LINE__ << " success to acquire 3d image! camera_name: " << deviceId;
 
 		}
@@ -711,8 +717,6 @@ bool cameraFunSDKfactoryCls::run()
 			qDebug() << __FUNCTION__ << " line:" << __LINE__ << "allowflag is false" << "Not Allow to getimage";
 
 		}
-
-
 		return true;
 	}
 	catch (QString ev)
@@ -737,7 +741,7 @@ bool create(const QString& DeviceSn, const QString& name, const QString& path)
 		if (pHeadSerialNo == DeviceSn)
 		{
 			OnePb temp;
-			temp.base = new Hd_CameraModule_3DKeyence3(index, path);
+			temp.base = new Hd_CameraModule_3DKeyence3(index, path + "/Hd_CameraModule_3DKeyence3/");
 			if (!temp.base->init())
 				return false;
 			temp.baseWidget = new QWidget();

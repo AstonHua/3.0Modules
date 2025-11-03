@@ -85,6 +85,7 @@ public:
 
     QJsonObject load_camera_Example();
     QString Sncode;
+	QString RootPath;
     cameraFunSDKfactoryCls* m_sdkFunc =nullptr;
     QMap<QString, QString> ParasValueMap;
 signals:

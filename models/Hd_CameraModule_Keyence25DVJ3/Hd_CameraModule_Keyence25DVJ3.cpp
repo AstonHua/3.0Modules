@@ -9,7 +9,7 @@
 #include <QDir>
 #pragma execution_character_set("utf-8")
 const QByteArray FirstCreateByte(R"({"OneSgnalsGetImageCounts": "1","SeralNum": "","OneGetImageTimeOut": "","LastUpdateTime": "","TriggerSource": "hard"})");
-bool createfile(const QString& filename,QByteArray writeByte)
+bool createAndWritefile(const QString& filename, const QByteArray& writeByte)
 {
 	QString path = filename.toLocal8Bit();
 	path = path.mid(0, path.lastIndexOf("/"));
@@ -39,6 +39,7 @@ bool createfile(const QString& filename,QByteArray writeByte)
 	file.close();
 	return true;
 }
+
 cameraFunSDKfactoryCls  GetDeviceInfo("","");
 struct OnePb
 {
@@ -62,9 +63,9 @@ QString byteArrayToUnicode(const QByteArray array) {
 	}
 	return text;
 }
-QJsonObject GetJsonObject(QString filename)
+QJsonObject load_JsonFile(QString filename)
 {
-	QString json_cfg_file_path = filename.toLocal8Bit();
+	QString json_cfg_file_path = filename;
 
 	QJsonObject json_object;
 	try
@@ -1054,10 +1055,21 @@ void cameraFunSDKfactoryCls::getPictureThread()
 	}
 }
 
-Hd_25DCameraVJ_module::Hd_25DCameraVJ_module(QString sn ,QString path,int settype, QObject* parent) : PbGlobalObject(settype, parent),SnCode(sn),RootPath(path)
+Hd_25DCameraVJ_module::Hd_25DCameraVJ_module(QString SnName,QString path,int settype, QObject* parent) : 
+	PbGlobalObject(settype, parent),SnCode(SnName),RootPath(path)
 {
 	famliy = PGOFAMLIY::CAMERA2_5D;
-	m_sdkFunc = new cameraFunSDKfactoryCls(sn, RootPath);
+	//RootPath = RootPath + "/Hd_CameraModule_3DKeyence3/";
+	JsonFilePath = RootPath+ + SnName + ".json";
+	if (!QFile(JsonFilePath).exists())
+		createAndWritefile(JsonFilePath, FirstCreateByte);
+	QJsonObject paramObj = load_JsonFile(JsonFilePath);
+	for (auto objStr : paramObj.keys())
+	{
+		ParasValueMap.insert(objStr, paramObj.value(objStr).toString());
+	}
+	m_sdkFunc = new cameraFunSDKfactoryCls(SnName, RootPath);
+	connect(m_sdkFunc, &cameraFunSDKfactoryCls::trigged, this, [=](int value) {emit trigged(value); });
 }
 
 Hd_25DCameraVJ_module::~Hd_25DCameraVJ_module()
@@ -1088,35 +1100,18 @@ bool Hd_25DCameraVJ_module::data(std::vector<cv::Mat>& outmats, QStringList& out
 bool Hd_25DCameraVJ_module::setData(const std::vector<cv::Mat>& mat, const QStringList& data)
 {
 	Q_UNUSED(mat);
-	return m_sdkFunc->TriggerSoftware();
+	if (mat.empty() && data.isEmpty())
+	{
+		bool flag = m_sdkFunc->TriggerSoftware();
+		emit trigged(501);
+		return flag;
+	}
 
+	return true;
 }
 
 bool Hd_25DCameraVJ_module::init()
 {
-	JsonFilePath = RootPath + "/" + SnCode + ".json";
-	QFile file(JsonFilePath);
-	if (file.exists())
-	{
-
-		QJsonObject obj = GetJsonObject(JsonFilePath);
-		QMap<QString, QString> ParamMap;
-	
-		for (auto str : obj.keys())
-		{
-			ParamMap.insert(str,obj.value(str).toString());
-		}
-		setParameter(ParamMap);
-	}
-	else
-	{
-		createfile(JsonFilePath, FirstCreateByte);
-	}
-	if (ParasValueMap.isEmpty())
-	{
-		emit trigged(1);
-		return false;
-	}
 	connect(this, &PbGlobalObject::trigged, [=](int Code) {
 		if (Code == 1000)
 		{
@@ -1152,7 +1147,6 @@ bool Hd_25DCameraVJ_module::init()
 
 	return flag;
 }
-
 
 bool Hd_25DCameraVJ_module::setParameter(const QMap<QString, QString>& insideValuesMaps)
 {

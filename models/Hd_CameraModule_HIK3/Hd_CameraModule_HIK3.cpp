@@ -9,6 +9,7 @@ struct OnePb
 QMap<QString, OnePb>  TotalMap;
 MV_CC_DEVICE_INFO_LIST m_stDevList;//相机设备
 void __stdcall ReconnectDevice(unsigned int nMsgType, void* pUser0);
+
 void __stdcall ImageCallBackEx(unsigned char* pData0, MV_FRAME_OUT_INFO_EX* pFrameInfo0, void* pUser0);
 
 void CloseDevice(void* handle)
@@ -17,7 +18,9 @@ void CloseDevice(void* handle)
 	MV_CC_CloseDevice(handle);
 	MV_CC_DestroyHandle(handle);
 }
+
 bool IsColor(MvGvspPixelType enType);
+
 int SearchDevice()
 {
 	memset(&m_stDevList, 0, sizeof(MV_CC_DEVICE_INFO_LIST));
@@ -29,6 +32,7 @@ int SearchDevice()
 	}
 	return 1;
 }
+
 bool connctDevice(string GetSnName, void* handle, void* pUser)
 {
 	cameraFunSDKfactoryCls* CurrentCamera = reinterpret_cast<cameraFunSDKfactoryCls*>(pUser);
@@ -107,6 +111,7 @@ void __stdcall ReconnectDevice(unsigned int nMsgType, void* pUser)
 		}
 	}
 }
+
 void __stdcall ImageCallBackEx(unsigned char* pData0, MV_FRAME_OUT_INFO_EX* pFrameInfo0, void* pUser0)
 {
 	double time_Start = (double)clock();
@@ -197,77 +202,11 @@ void __stdcall ImageCallBackEx(unsigned char* pData0, MV_FRAME_OUT_INFO_EX* pFra
 	cv::imwrite(savePath.toStdString(), resizeS);*/
 }
 
-bool create(const QString& DeviceSn, const QString& name, const QString& path)
-{
-	//if (name.split(':').last() == "old") return true;
-	if (DeviceSn.isEmpty() || name.isEmpty() || path.isEmpty())
-		return false;
-	OnePb temp;
-	temp.base = new Hd_CameraModule_HIK3(DeviceSn);
-	if (!temp.base->init())
-		return false;
-	temp.baseWidget = new mPrivateWidget(temp.base);
-	temp.DeviceSn = DeviceSn;
-	TotalMap.insert(name.split(':').first(), temp);
-	return  true;
-}
-
-void destroy(const QString& name)
-{
-	auto temp = TotalMap.take(name);
-	if (temp.base)
-	{
-		delete temp.base;
-	}
-	if (temp.baseWidget)
-	{
-		delete temp.baseWidget;
-	}
-}
-QWidget* getCameraWidgetPtr(const QString& name)
-{
-	if (TotalMap.value(name).baseWidget)
-		return TotalMap.value(name).baseWidget;
-	return nullptr;
-}
-PbGlobalObject* getCameraPtr(const QString& name)
-{
-
-
-	if (TotalMap.value(name).base)
-		return TotalMap.value(name).base;
-	return nullptr;
-}
-QStringList getCameraSnList()
-{
-	QStringList temp;
-	if (!SearchDevice())
-		return temp;
-
-	for (int i = 0; i < m_stDevList.nDeviceNum; i++)
-	{
-		//SN
-		unsigned char* name = m_stDevList.pDeviceInfo[i]->SpecialInfo.stGigEInfo.chSerialNumber;
-		//userID
-		//unsigned char* name=m_stDevList.pDeviceInfo[i]->SpecialInfo.stGigEInfo.chUserDefinedName;
-		string userName = static_cast<string>((LPCSTR)name);
-		temp << QString::fromStdString(userName);
-	}
-	//查询已经使用的
-	foreach(const auto& tmp, TotalMap)
-	{
-		if (temp.contains(tmp.DeviceSn))
-		{
-			temp.removeOne(tmp.DeviceSn);
-		}
-	}
-	return temp;
-}
-
 cameraFunSDKfactoryCls::~cameraFunSDKfactoryCls()
 {
 	CloseDevice(handle);
 }
+
 bool cameraFunSDKfactoryCls::initSdk(QMap<QString, QString>& insideValuesMaps)
 {
 	if (!connctDevice(SnCode, getHandle(), this))
@@ -344,7 +283,12 @@ bool Hd_CameraModule_HIK3::init()
 bool Hd_CameraModule_HIK3::setData(const std::vector<cv::Mat>& mats, const QStringList& data)
 {
 	Q_UNUSED(mats);
-	MV_CC_SetCommandValue(m_sdkFunc->handle, "TriggerSoftware");
+	if (mats.empty() && data.isEmpty())
+	{
+		MV_CC_SetCommandValue(m_sdkFunc->handle, "TriggerSoftware");
+		emit trigged(501);
+		return true;
+	}
 	return true;
 }
 //获取数据
@@ -371,12 +315,31 @@ void Hd_CameraModule_HIK3::registerCallBackFun(PBGLOBAL_CALLBACK_FUN func, QObje
 	m_sdkFunc->CallbackFuncVec.append(TempPack);
 	qDebug() << getString;
 }
-void Hd_CameraModule_HIK3::cancelCallBackFun(PBGLOBAL_CALLBACK_FUN func, QObject* parent, const QString& getString)
+
+void Hd_CameraModule_HIK3::cancelCallBackFun(PBGLOBAL_CALLBACK_FUN callBackFun, QObject* parent, const QString& getString)
 {
 	int index = getString.toInt();
-	m_sdkFunc->CallbackFuncVec.removeAt(index);
-	qDebug() << index;
+	if (callBackFun == m_sdkFunc->CallbackFuncVec.at(index).GetimagescallbackFunc)
+	{
+		qDebug() << index;
+		m_sdkFunc->CallbackFuncVec.removeAt(index);
+	}
+	else
+	{
+		int size = m_sdkFunc->CallbackFuncVec.size();
+		for (int i = 0; i < size; i++)
+		{
+			if (m_sdkFunc->CallbackFuncVec.at(i).GetimagescallbackFunc == callBackFun)
+			{
+				m_sdkFunc->CallbackFuncVec.removeAt(i);
+				qDebug() << i;
+				return;
+			}
+		}
+	}
+	return;
 }
+
 QJsonObject Hd_CameraModule_HIK3::load_camera_Example()
 {
 	QDir dir = QCoreApplication::applicationDirPath();
@@ -435,6 +398,78 @@ QJsonObject Hd_CameraModule_HIK3::load_camera_Example()
 	}
 	return json_object;
 }
+
+bool create(const QString& DeviceSn, const QString& name, const QString& path)
+{
+	//if (name.split(':').last() == "old") return true;
+	if (DeviceSn.isEmpty() || name.isEmpty() || path.isEmpty())
+		return false;
+	OnePb temp;
+	temp.base = new Hd_CameraModule_HIK3(DeviceSn);
+	if (!temp.base->init())
+		return false;
+	temp.baseWidget = new mPrivateWidget(temp.base);
+	temp.DeviceSn = DeviceSn;
+	TotalMap.insert(name.split(':').first(), temp);
+	return  true;
+}
+
+void destroy(const QString& name)
+{
+	auto temp = TotalMap.take(name);
+	if (temp.base)
+	{
+		delete temp.base;
+	}
+	if (temp.baseWidget)
+	{
+		delete temp.baseWidget;
+	}
+}
+
+QWidget* getCameraWidgetPtr(const QString& name)
+{
+	if (TotalMap.value(name).baseWidget)
+		return TotalMap.value(name).baseWidget;
+	return nullptr;
+}
+
+PbGlobalObject* getCameraPtr(const QString& name)
+{
+
+
+	if (TotalMap.value(name).base)
+		return TotalMap.value(name).base;
+	return nullptr;
+}
+
+QStringList getCameraSnList()
+{
+	QStringList temp;
+	if (!SearchDevice())
+		return temp;
+
+	for (int i = 0; i < m_stDevList.nDeviceNum; i++)
+	{
+		//SN
+		unsigned char* name = m_stDevList.pDeviceInfo[i]->SpecialInfo.stGigEInfo.chSerialNumber;
+		//userID
+		//unsigned char* name=m_stDevList.pDeviceInfo[i]->SpecialInfo.stGigEInfo.chUserDefinedName;
+		string userName = static_cast<string>((LPCSTR)name);
+		temp << QString::fromStdString(userName);
+	}
+	//查询已经使用的
+	foreach(const auto& tmp, TotalMap)
+	{
+		if (temp.contains(tmp.DeviceSn))
+		{
+			temp.removeOne(tmp.DeviceSn);
+		}
+	}
+	return temp;
+}
+
+
 
 QString byteArrayToUnicode(const QByteArray array) {
 
@@ -498,6 +533,7 @@ QImage cvMatToQImage(const cv::Mat& src)
 	}
 	return QImage();
 }
+
 mPrivateWidget::mPrivateWidget(void* handle)
 {
 	m_Camerahandle = reinterpret_cast<Hd_CameraModule_HIK3*>(handle);

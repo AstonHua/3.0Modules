@@ -56,13 +56,6 @@ private://inside
     QString SnCode;
     QString RootPath;
     QString JsonFilePath;
-    //bool  readData(std::vector<cv::Mat>&, QByteArray&);
-    //bool  writeData(std::vector<cv::Mat>&, QByteArray&);
-    //bool  initParas(QByteArray&);
-    //void  getPictureThread();
-    //bool AcquisitionStartEx_SingleFrame(bool bMultiCaptureUpdateImage, std::string sMultiCaptureImageType, cv::Mat& result);
-
-  
 private:
     QMap<QString, QString> ParasValueMap;
  
@@ -92,6 +85,7 @@ public:
 
 class cameraFunSDKfactoryCls :public QObject
 {
+    Q_OBJECT;
 public:
     KglDevice* kglDevice = nullptr;
     KglStream* kglStream = nullptr;
@@ -149,6 +143,8 @@ public:
     std::atomic_bool allowflag;
     std::atomic_bool stopbit = false;
     bool isBufferCapturestart = false;
+signals:
+    void trigged(int);
 };
 
 

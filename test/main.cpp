@@ -1,50 +1,67 @@
-#include <opencv.hpp>
-#include <iostream>
-using namespace cv;
-using namespace std;
-
-
-/**
- * @brief °²È«²Ã¼ôÍ¼ÏñÖĞµÄ¾ØĞÎÇøÓò
- *
- * @param src ÊäÈëÍ¼Ïñ
- * @param roi Òª²Ã¼ôµÄ¾ØĞÎÇøÓò
- * @return cv::Mat ²Ã¼ôºóµÄÍ¼Ïñ£¬Èç¹ûROIÎŞĞ§Ôò·µ»Ø¿Õ¾ØÕó
- */
-cv::Mat safeCrop(const cv::Mat& src, const cv::Rect& roi) {
-    // ¼ì²éÔ´Í¼ÏñÊÇ·ñÓĞĞ§
-    if (src.empty()) {
-        std::cerr << "Error: Source image is empty!" << std::endl;
-        return cv::Mat();
-    }
-
-    // ¼ÆËã°²È«µÄROI±ß½ç
-    int x = std::max(roi.x, 0);
-    int y = std::max(roi.y, 0);
-    int width = std::min(roi.width, src.cols - x);
-    int height = std::min(roi.height, src.rows - y);
-
-    // ¼ì²éROIÊÇ·ñÓĞĞ§
-    if (width <= 0 || height <= 0) {
-        std::cerr << "Error: Invalid ROI (width: " << width
-            << ", height: " << height << ")" << std::endl;
-        return cv::Mat();
-    }
-
-    // ´´½¨°²È«µÄROI¾ØĞÎ
-    cv::Rect safeRoi(x, y, width, height);
-
-    // Ö´ĞĞ²Ã¼ô
-    return src(safeRoi).clone(); // Ê¹ÓÃcloneÈ·±£·µ»Ø¶ÀÁ¢µÄÄÚ´æ
-}
-int main()
+#include <qlibrary.h>
+#include <pbglobalobject.h>
+#include <QApplication>
+#include <qDebug>
+#include <qmainwindow.h>
+using CreateFuncPtr = bool (*)(const QString&, const QString&, const QString&);
+using destroyFuncPtr = void (*)(const QString& name);
+using getCameraWidgetPtr =QWidget* (*)(const QString& name);
+using getCameraPtr = PbGlobalObject* (*)(const QString& name);
+using getCameraSnListPtr = QStringList(*)();
+//QStringList getCameraSnList();
+int main(int argc, char* argv[])
 {
-	cv::Mat readImage = cv::imread("E:\\localImage\\new1\\0.bmp");
+	QApplication a(argc, argv);
 
-    cv::Rect rect{10,10,2000,5000};
+	QLibrary* m_lib = new QLibrary("./Hd_CameraModule_HIK3.dll");
+	bool flag = m_lib->load();
+	if (!m_lib->isLoaded())
+	{
+		//qCritical() << "Loaded error:" << m_lib->errorString();
+		delete m_lib;
+		m_lib = nullptr;
+		return false;
+	}
+	QWidget* centerwidget = nullptr;
+	if (flag)
+	{
+		try
+		{
+			CreateFuncPtr createFun = reinterpret_cast<CreateFuncPtr>(m_lib->resolve("create"));
+			destroyFuncPtr destroyFunc = reinterpret_cast<destroyFuncPtr>(m_lib->resolve("destroy"));
+			getCameraWidgetPtr getCameraWidget = reinterpret_cast<getCameraWidgetPtr>(m_lib->resolve("getCameraWidgetPtr"));
+			getCameraPtr getCamera = reinterpret_cast<getCameraPtr>(m_lib->resolve("getCameraPtr"));
+			getCameraSnListPtr getCameraSnList = reinterpret_cast<getCameraSnListPtr>(m_lib->resolve("getCameraSnList"));
+			if (createFun)
+			{
+				QStringList list = getCameraSnList();
+				createFun(list.first(), list.first(), list.first());
+				std::cout << "success";
+				PbGlobalObject* ptr = getCamera(list.first());
+				//bool flag = ptr->init();
+				centerwidget = getCameraWidget(list.first());
+				qDebug() << flag;
+				//DataDealWithPtr = createFun();
+				//if (CommunicationPtr)
+				{
+					//DataDealWithPtr->CommunicationPtr = CommunicationPtr;
+				}
+				//return DataDealWithPtr->initParas(QJsonDocument(obj.toObject().value("åˆå§‹åŒ–æ•°æ®").toObject()).toJson());
+			}
+		}
+		catch (const std::exception&)
+		{
+			std::cout << "Exception occurred while loading function." << std::endl;
+		}
 
-    cv::Mat safemat = safeCrop(readImage, rect)
+		//ReleaseFunction releaseFun = (ReleaseFunction)m_lib->resolve("destory");
+		
+	}
 
 
-	return 0;
+	QMainWindow w;
+	w.setCentralWidget(centerwidget);
+	w.show();
+
+	return a.exec();
 }

@@ -28,7 +28,7 @@ option(BUILD_DEBUG_POSTFIX_D "Append d suffix to debug libraries" OFF)
 
 # 默认生成参数设置
 if(NE_DEVELOPER_DEFAULTS)
-  set(CMAKE_CXX_STANDARD 11)
+  set(CMAKE_CXX_STANDARD 17)
   set(CMAKE_CXX_EXTENSIONS OFF)
   # PROJECT_BINARY_DIR 指build生成所在文件夹
   # PROJECT_SOURCE_DIR 指最外层CMakeLists.txt所在文件夹

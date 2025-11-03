@@ -22,7 +22,8 @@
 const int MAX_LJXA_DEVICENUM = 6;
 #pragma comment(lib, "winmm.lib")
 #pragma execution_character_set("utf-8")
-
+using namespace std;
+using namespace cv;
 typedef struct {
     int 	y_linenum;
     float	y_pitch_um;
@@ -61,8 +62,7 @@ public:
 public:
     QString RootPath;//家目录
     std::atomic_bool allowflag;
-    ThreadSafeQueue<cv::Mat> heightMatS;//高度图
-    ThreadSafeQueue<cv::Mat> luminanceMatS;//灰度图
+    ThreadSafeQueue<vector<cv::Mat>> ImageMats;//图像缓存队列
     QObject* parent = nullptr;
     bool  run();
     QVector<CallbackFuncPack> CallbackFuncVec;
