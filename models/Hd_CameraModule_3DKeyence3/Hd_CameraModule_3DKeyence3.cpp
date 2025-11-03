@@ -4,7 +4,57 @@
 #include <QTextCodec>
 #include <qqueue.h>
 #include <QWidget>
+const QByteArray FirstCreateByte(R"({"DeviceId": "0",
+  "GetOnceImageTimes": "5000",
+  "Ip": "192.168.0.1",
+  "Port": "24691",
+  "xImageSize": "3200",
+  "yImageSize": "1000",
+  "y_pitch_um": "20.0",
+  "OneceGetImageCounts": "2"})");
+//初始化数据，创建json文件数据
+/*
+DeviceId  设备ID，在数组中的位置
+GetOnceImageTimes  一次出图超时时间
+Ip 设备IP
+Port 端口号
+xImageSize 图像X方向长度(宽)
+yImageSize 图像y方向长度(高)
+y_pitch_um y方向精度
+OneceGetImageCounts 一次出图数量 (一般是两张，一张亮度图，一张高度图)
+*/
 
+
+bool createAndWritefile(const QString& filename, const QByteArray& writeByte)
+{
+    QString path = filename.toLocal8Bit();
+    path = path.mid(0, path.lastIndexOf("/"));
+    QDir dir(path);
+    dir.mkpath(dir.path());
+    QFile file(filename);
+    if (file.exists())
+    {
+        if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Append)) {
+            qWarning() << "错误,无法创建文件" << filename << file.errorString();
+            return false;
+        }
+    }
+    else
+    {
+        if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
+            qWarning() << "错误,无法创建文件" << filename << file.errorString();
+            return false;
+        }
+    }
+    QTextStream out(&file);
+    out.setCodec("utf-8");
+    //for (auto str : inputData)
+    {
+        out << writeByte;
+    }
+    file.close();
+    return true;
+}
 #pragma execution_character_set("utf-8")
 struct OnePb
 {
@@ -53,7 +103,7 @@ void Hd_CameraModule_3DKeyence3::registerCallBackFun(PBGLOBAL_CALLBACK_FUN callB
     qDebug() << getString;
 }
 
-cameraFunSDKfactoryCls::cameraFunSDKfactoryCls(int id, QObject* praent):deviceId(id), parent(praent)
+cameraFunSDKfactoryCls::cameraFunSDKfactoryCls(int id, QString RootPath, QObject* praent):deviceId(id), parent(praent), RootPath(RootPath)
 {
 
 }
@@ -199,9 +249,6 @@ bool cameraFunSDKfactoryCls::initSdk(QMap<QString, QString>& insideValuesMaps)
     //            }
     //        }
     //    }
-
-    qDebug() << __FUNCTION__ << " line:" << __LINE__ << " camera_name:" << camera_name << " paras init is success!";
-
     // 初始化申请空间 20230214
     startReq_ptr = new LJX8IF_HIGH_SPEED_PRE_START_REQ;
     profileInfo_ptr = new LJX8IF_PROFILE_INFO;
@@ -349,95 +396,18 @@ void cameraFunSDKfactoryCls::LJXA_ACQ_CloseDevice(int lDeviceId)
     qDebug() << __FUNCTION__ << " line:" << __LINE__ << "  Close device!";
 }
 
-
-bool create(const QString& DeviceSn, const QString& name, const QString& path)
-{
-    int index = 0;
-    for (; index < MAX_LJXA_DEVICENUM; index++)
-    {
-        CHAR* pControllerSerialNo = nullptr; CHAR* pHeadSerialNo = nullptr;
-        LJX8IF_GetSerialNumber(index, pControllerSerialNo, pHeadSerialNo);
-        if (pControllerSerialNo == nullptr || pHeadSerialNo == nullptr)
-        {
-            qWarning() << "NOT Found Device ID" << index << DeviceSn;
-        }
-            break;
-        if (pHeadSerialNo == DeviceSn)
-        {
-            OnePb temp;
-            temp.base = new Hd_CameraModule_3DKeyence3(index);
-            temp.baseWidget = new QWidget();
-            temp.DeviceSn = DeviceSn;
-            TotalMap.insert(name, temp);
-            QMap<QString, QString> tempmap;
-            tempmap["jsonPath"] = path;
-            return  temp.base->setParameter(tempmap);
-        }
-    }
-    return false;
-}
-
-void destroy(const QString& name)
-{
-    auto temp = TotalMap.take(name);
-    if (temp.base)
-    {
-        delete temp.base;
-    }
-    if (temp.baseWidget)
-    {
-        delete temp.baseWidget;
-    }
-
-}
-QWidget* getCameraWidgetPtr(const QString& name)
-{
-    if (TotalMap.value(name).baseWidget)
-        return TotalMap.value(name).baseWidget;
-    return nullptr;
-}
-PbGlobalObject* getCameraPtr(const QString& name)
-{
-    if (TotalMap.value(name).base)
-        return TotalMap.value(name).base;
-    return nullptr;
-}
-QStringList getCameraSnList()
-{
-    QStringList temp;
-    for (int i = 0; i < MAX_LJXA_DEVICENUM; i++)
-    {
-        CHAR* pControllerSerialNo = nullptr; CHAR* pHeadSerialNo = nullptr;
-        LJX8IF_GetSerialNumber(i, pControllerSerialNo, pHeadSerialNo);
-        if (pControllerSerialNo == nullptr || pHeadSerialNo == nullptr)
-            break;
-        temp << pHeadSerialNo;
-    }
-
-    // 查询已经使用的
-    foreach(const auto& tmp, TotalMap)
-    {
-        if (temp.contains(tmp.DeviceSn))
-        {
-            temp.removeOne(tmp.DeviceSn);
-        }
-    }
-    return temp;
-}
-//int myIDS[10000] = { 0 };
-
-//类创建
-Hd_CameraModule_3DKeyence3::Hd_CameraModule_3DKeyence3(int DevicedID,int settype, QObject* parent) : PbGlobalObject(settype, parent), deviceId(DevicedID)
+Hd_CameraModule_3DKeyence3::Hd_CameraModule_3DKeyence3(int DevicedID,QString RootPath,int settype, QObject* parent) : PbGlobalObject(settype, parent), deviceId(DevicedID)
 {
         famliy = PGOFAMLIY::CAMERA3D;
-        m_sdkFunc = new cameraFunSDKfactoryCls(DevicedID,this);
-        connect(m_sdkFunc, &cameraFunSDKfactoryCls::trigged, this, [=](int value) {emit trigged(value); });
-
         CHAR* pControllerSerialNo = nullptr; CHAR* pHeadSerialNo = nullptr;
         LJX8IF_GetSerialNumber(DevicedID, pControllerSerialNo, pHeadSerialNo);
         SnName = pHeadSerialNo;
-}
+        RootPath = RootPath + "/Hd_CameraModule_3DKeyence3/"+ SnName+".json";
+        createAndWritefile(RootPath, FirstCreateByte);
+        m_sdkFunc = new cameraFunSDKfactoryCls(DevicedID, RootPath,this);
+        connect(m_sdkFunc, &cameraFunSDKfactoryCls::trigged, this, [=](int value) {emit trigged(value); });
 
+}
 
 Hd_CameraModule_3DKeyence3::~Hd_CameraModule_3DKeyence3()
 {
@@ -449,14 +419,10 @@ Hd_CameraModule_3DKeyence3::~Hd_CameraModule_3DKeyence3()
     qDebug() << __FUNCTION__ << "line:" << __LINE__ << " delete success!";
 }
 
-//setParameter之后再调用，返回当前参数
-    //相机：获取默认参数；
-    //通信：获取初始化示例参数
 QMap<QString, QString> Hd_CameraModule_3DKeyence3::parameters()
 {
    return ParasValueMap;
 }
-
 
 QJsonObject Hd_CameraModule_3DKeyence3::load_camera_Example()
 {
@@ -517,14 +483,12 @@ QJsonObject Hd_CameraModule_3DKeyence3::load_camera_Example()
     return json_object;
 }
 
-
-//初始化参数；通信/相机的初始化参数
 bool Hd_CameraModule_3DKeyence3::setParameter(const QMap<QString, QString>& ParameterMap)
 {
+
     ParasValueMap = ParameterMap;
     return true;
 }
-
 //初始化(加载模块待内存)
 bool Hd_CameraModule_3DKeyence3::init()
 {
@@ -566,10 +530,6 @@ bool Hd_CameraModule_3DKeyence3::init()
     return flag;
 }
 
-//设置数据
-    //相机：第一张图的参数，QStringList：00 曝光值 增益值；
-    //相机：第N张图的参数，QStringList：非00 曝光值 增益值；
-    //完成后发送信号trigged(bool);
 bool Hd_CameraModule_3DKeyence3::setData(const std::vector<cv::Mat>& mats, const QStringList& data)
 {
 
@@ -767,7 +727,7 @@ bool cameraFunSDKfactoryCls::run()
             {
                 luminanceMatS.push(cv::Mat(yImageSize, xImageSize, CV_16U, luminanceImage));
                 heightMatS.push(cv::Mat(yImageSize, xImageSize, CV_16U, heightImage));
-                qDebug() << __FUNCTION__ << " line:" << __LINE__ << " success to acquire 3d image! camera_name: " << camera_name;
+                qDebug() << __FUNCTION__ << " line:" << __LINE__ << " success to acquire 3d image! camera_name: " << deviceId;
 
             }
             else
@@ -784,4 +744,79 @@ bool cameraFunSDKfactoryCls::run()
             qCritical() << __FUNCTION__ << "  line: " << __LINE__ << "  ev: " << ev;
             return false;
         }
+}
+
+bool create(const QString& DeviceSn, const QString& name, const QString& path)
+{
+    int index = 0;
+    for (; index < MAX_LJXA_DEVICENUM; index++)
+    {
+        CHAR* pControllerSerialNo = nullptr; CHAR* pHeadSerialNo = nullptr;
+        LJX8IF_GetSerialNumber(index, pControllerSerialNo, pHeadSerialNo);
+        if (pControllerSerialNo == nullptr || pHeadSerialNo == nullptr)
+        {
+            qWarning() << "NOT Found Device ID" << index << DeviceSn;
+        }
+        break;
+        if (pHeadSerialNo == DeviceSn)
+        {
+            OnePb temp;
+            temp.base = new Hd_CameraModule_3DKeyence3(index, path);
+            temp.baseWidget = new QWidget();
+            temp.DeviceSn = DeviceSn;
+            TotalMap.insert(name.split(':').first(), temp);
+            QMap<QString, QString> tempmap;
+            tempmap["jsonPath"] = path;
+            return  temp.base->setParameter(tempmap);
+        }
+    }
+    return false;
+}
+
+void destroy(const QString& name)
+{
+    auto temp = TotalMap.take(name);
+    if (temp.base)
+    {
+        delete temp.base;
+    }
+    if (temp.baseWidget)
+    {
+        delete temp.baseWidget;
+    }
+
+}
+QWidget* getCameraWidgetPtr(const QString& name)
+{
+    if (TotalMap.value(name).baseWidget)
+        return TotalMap.value(name).baseWidget;
+    return nullptr;
+}
+PbGlobalObject* getCameraPtr(const QString& name)
+{
+    if (TotalMap.value(name).base)
+        return TotalMap.value(name).base;
+    return nullptr;
+}
+QStringList getCameraSnList()
+{
+    QStringList temp;
+    for (int i = 0; i < MAX_LJXA_DEVICENUM; i++)
+    {
+        CHAR* pControllerSerialNo = nullptr; CHAR* pHeadSerialNo = nullptr;
+        LJX8IF_GetSerialNumber(i, pControllerSerialNo, pHeadSerialNo);
+        if (pControllerSerialNo == nullptr || pHeadSerialNo == nullptr)
+            break;
+        temp << pHeadSerialNo;
+    }
+
+    // 查询已经使用的
+    foreach(const auto& tmp, TotalMap)
+    {
+        if (temp.contains(tmp.DeviceSn))
+        {
+            temp.removeOne(tmp.DeviceSn);
+        }
+    }
+    return temp;
 }

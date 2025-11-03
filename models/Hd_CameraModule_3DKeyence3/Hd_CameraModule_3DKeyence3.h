@@ -51,13 +51,14 @@ class cameraFunSDKfactoryCls :public QObject
 {
     Q_OBJECT
 public:
-    cameraFunSDKfactoryCls(int DevicedID, QObject* parent);
+    cameraFunSDKfactoryCls(int DevicedID, QString rootPath,QObject* parent);
     ~cameraFunSDKfactoryCls();
     bool initSdk(QMap<QString, QString>& insideValuesMaps);
     int  LJXA_ACQ_OpenDevice(int lDeviceId, LJX8IF_ETHERNET_CONFIG* EthernetConfig, int HighSpeedPortNo);
     void LJXA_ACQ_CloseDevice(int lDeviceId);
     bool InitHighSpeed();
 public:
+    QString RootPath;//家目录
     std::atomic_bool allowflag;
     ThreadSafeQueue<cv::Mat> heightMatS;//高度图
     ThreadSafeQueue<cv::Mat> luminanceMatS;//灰度图
@@ -89,7 +90,7 @@ public:
 
     LJX8IF_ETHERNET_CONFIG EthernetConfig;//当前id设备对应ip信息
 
-    QString camera_name;    // 相机名称
+    //QString camera_name;    // 相机名称
     int	recontimeout_ms = 3000;
 
 signals:
@@ -99,7 +100,7 @@ class  Hd_CameraModule_3DKeyence3 :public PbGlobalObject
 {
     Q_OBJECT
 public:
-    explicit Hd_CameraModule_3DKeyence3(int DevicedID,int settype = -1, QObject* parent = nullptr);//对应哪个品牌相机(触发方式)/通信
+    explicit Hd_CameraModule_3DKeyence3(int DevicedID, QString rootPath,int settype = -1, QObject* parent = nullptr);//对应哪个品牌相机(触发方式)/通信
     ~Hd_CameraModule_3DKeyence3();
     //#######################通用函数#######################
     //初始化参数；通信/相机的初始化参数
@@ -125,7 +126,7 @@ public:
     //注册回调 string对应自身的参数协议 （自定义）
     virtual void registerCallBackFun(PBGLOBAL_CALLBACK_FUN, QObject*, const QString&);
 private:
-
+    QString RootPath;
     int deviceId = 0;
     QString SnName;
     cameraFunSDKfactoryCls* m_sdkFunc = nullptr;

@@ -1,0 +1,10 @@
+{
+  "DeviceId": "0",
+  "GetOnceImageTimes": "5000",
+  "Ip": "192.168.0.1",
+  "Port": "24691",
+  "xImageSize": "3200",
+  "yImageSize": "1000",
+  "y_pitch_um": "20.0",
+  "OneceGetImageCounts": "2"
+}
