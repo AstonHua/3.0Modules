@@ -43,7 +43,7 @@ public:
     enum PGOFAMLIY { GLOBALVARIABLE = 0, CAMERA2D, CAMERA2_5D, CAMERA3D, PLC, COM }famliy;
     //小类
     int type1 = -1;  //对应哪个品牌相机(触发方式)/通信
-    int type2 = -1;
+    int type2 = -1;  //是否需要触发器 1 need； 2 noneed
     int type3 = -1;
 
     //名称
@@ -51,6 +51,8 @@ public:
     int id;
 
 signals:
-    void trigged(int);      //切换连接状态也需要发送trgged信号  //0，相机重连成功；1，相机掉线；2:软触发; 3：硬触发;   1000，重置计数
+    void trigged(int);      //切换连接状态也需要发送trgged信号  
+    //0，相机重连成功；1，相机掉线；2:软触发; 3：硬触发;   1000，重置计数
+    //使用触发器模式下 预处理结束   501
 };
 #endif // PBGLOBALOBJECT_H

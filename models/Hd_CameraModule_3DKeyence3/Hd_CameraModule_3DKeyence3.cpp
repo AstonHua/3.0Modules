@@ -1,6 +1,5 @@
 ﻿#include "Hd_CameraModule_3DKeyence3.h"
 #include <exception>
-
 #include <QTextCodec>
 #include <qqueue.h>
 #include <QWidget>
@@ -91,7 +90,6 @@ QString byteArrayToUnicode(const QByteArray array) {
     }
     return text;
 }
-
 //注册回调 string对应自身的参数协议 （自定义）
 void Hd_CameraModule_3DKeyence3::registerCallBackFun(PBGLOBAL_CALLBACK_FUN callBackFun, QObject* parent, const QString& getString)
 {
@@ -102,7 +100,29 @@ void Hd_CameraModule_3DKeyence3::registerCallBackFun(PBGLOBAL_CALLBACK_FUN callB
     m_sdkFunc->CallbackFuncVec.append(TempPack);
     qDebug() << getString;
 }
-
+void Hd_CameraModule_3DKeyence3::cancelCallBackFun(PBGLOBAL_CALLBACK_FUN callBackFun, QObject* parent, const QString& getString)
+{
+    int index = getString.toInt();
+    if (callBackFun == m_sdkFunc->CallbackFuncVec.at(index).GetimagescallbackFunc)
+    {
+        qDebug() << index;
+        m_sdkFunc->CallbackFuncVec.removeAt(index);
+    }
+    else
+    {
+        int size = m_sdkFunc->CallbackFuncVec.size();
+        for (int i = 0;i< size; i++)
+        {
+            if (m_sdkFunc->CallbackFuncVec.at(i).GetimagescallbackFunc == callBackFun)
+            {
+                m_sdkFunc->CallbackFuncVec.removeAt(i);
+                qDebug() << i;
+                return;
+            }           
+        }
+    }
+    return;
+}
 cameraFunSDKfactoryCls::cameraFunSDKfactoryCls(int id, QString RootPath, QObject* praent):deviceId(id), parent(praent), RootPath(RootPath)
 {
 

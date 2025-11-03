@@ -124,7 +124,9 @@ public:
     //获取数据
     bool data(std::vector<cv::Mat>&, QStringList&);
     //注册回调 string对应自身的参数协议 （自定义）
-    virtual void registerCallBackFun(PBGLOBAL_CALLBACK_FUN, QObject*, const QString&);
+    void registerCallBackFun(PBGLOBAL_CALLBACK_FUN, QObject*, const QString&);
+    void cancelCallBackFun(PBGLOBAL_CALLBACK_FUN, QObject*, const QString&);
+
 private:
     QString RootPath;
     int deviceId = 0;
