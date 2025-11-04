@@ -94,6 +94,7 @@ class CameraFunSDKfactoryCls : public QObject
     Q_OBJECT
 public:
     explicit CameraFunSDKfactoryCls(QString sn, QString path, QObject* parent = nullptr);
+    ~CameraFunSDKfactoryCls();
     void upDateParam();
     bool initSdk(QMap<QString, QString>& insideValuesMaps);
 
@@ -112,8 +113,14 @@ public:
     ThreadSafeQueue<vector<cv::Mat>> ImageMats;//图像缓存队列
 
     int  triggedType = 0;
+    bool CameraStatus = true;
+    bool statusRunning = true;
 signals:
     void trigged(int);
+public:
+
+private://内部参数通过接口设置
+
 };
 
 class Hd_CameraModule_3DLMI3 :public PbGlobalObject

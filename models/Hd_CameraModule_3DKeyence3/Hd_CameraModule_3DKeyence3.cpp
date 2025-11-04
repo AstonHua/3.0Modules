@@ -489,7 +489,11 @@ bool Hd_CameraModule_3DKeyence3::init()
 
 bool Hd_CameraModule_3DKeyence3::setData(const std::vector<cv::Mat>& mats, const QStringList& data)
 {
-	return m_sdkFunc->run();
+	if (mats.empty() && data.isEmpty())//外部调用只做触发
+	{
+		return m_sdkFunc->run();
+	}
+	return true;
 }
 //获取数据
 bool Hd_CameraModule_3DKeyence3::data(std::vector<cv::Mat>& ImgS, QStringList& QStringListdata)
@@ -627,8 +631,8 @@ bool cameraFunSDKfactoryCls::run()
 		}
 
 		qDebug() << __FUNCTION__ << "  line:" << __LINE__ << " acquring image...! ";
-		Hd_CameraModule_3DKeyence3* CurrentCamera = reinterpret_cast<Hd_CameraModule_3DKeyence3*>(parent);
-		emit CurrentCamera->trigged(501);
+
+		emit trigged(501);
 		DWORD start = timeGetTime();
 		while (true)
 		{

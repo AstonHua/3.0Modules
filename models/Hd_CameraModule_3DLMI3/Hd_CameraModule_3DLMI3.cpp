@@ -127,7 +127,7 @@ struct OnePb
 	QString DeviceSn;
 };
 QMap<QString, OnePb>  TotalMap;
-QMap<GoSystem, CameraFunSDKfactoryCls*> CallBackMap;//回调里面只传GoSystem*
+QMap<GoSystem, CameraFunSDKfactoryCls*> CallBackMap;//回调里面只传GoSystem*,通过GoSystem*绑定实际操作类
 #pragma region LMI
 QString byteArrayToUnicode(const QByteArray array)
 {
@@ -261,7 +261,7 @@ bool InitLmi(k32u ID, CameraFunSDKfactoryCls* m_CameraFunSDKfactoryCls)
 		qDebug() << "[Error] " << "Error: GoSensor_Connect:%d\n", status;
 		return false;
 	}
-
+	CallBackMap.insert(m_CameraFunSDKfactoryCls->system1, m_CameraFunSDKfactoryCls);
 	// enable sensor data channel
 	if ((status = GoSystem_EnableData(m_CameraFunSDKfactoryCls->system1, kTRUE)) != kOK)
 	{
@@ -317,8 +317,6 @@ void CloseLmi(CameraFunSDKfactoryCls* m_CameraFunSDKfactoryCls)
 Hd_CameraModule_3DLMI3::Hd_CameraModule_3DLMI3(QString DeviceSn, QString RootPath, int settype, QObject* parent)
 	: PbGlobalObject(settype, parent)
 {
-	QFuture<void> myF = QtConcurrent::run(this, &Hd_CameraModule_3DLMI3::threadCheckState);
-
 	famliy = PGOFAMLIY::CAMERA3D;	
 	SnName = DeviceSn;
 	JsonFile = RootPath + SnName + ".json";
@@ -389,6 +387,7 @@ bool Hd_CameraModule_3DLMI3::init()
 	{
 		type1 = 1;
 	}
+	QtConcurrent::run(this, &Hd_CameraModule_3DLMI3::threadCheckState);//开启相机连接状态监控线程
 	qDebug() << SnName;
 	return flag;
 }
@@ -397,6 +396,8 @@ bool Hd_CameraModule_3DLMI3::setData(const std::vector<cv::Mat>& mats, const QSt
 {
 	if (mats.empty() && data.isEmpty())//外部调用只做触发
 	{
+
+		emit trigged(501);
 		return true;
 	}
 	else//其他调用，界面等
@@ -426,44 +427,44 @@ bool Hd_CameraModule_3DLMI3::checkStatus()
 void Hd_CameraModule_3DLMI3::threadCheckState() //线程检查相机状态
 {
 	int checkNum = 0;
-	//while (m_sdkFunc->ifRunning == true)
-	//{
-	//	if (checkNum++ == 50)
-	//	{
-	//		if (m_sdkFunc->sensor != kNULL)
-	//		{
-	//			bool currentState = false;
-	//			int mstate = GoSensor_State(m_sdkFunc->sensor);
-	//			if (mstate == 6)
-	//				currentState = false;
-	//			else
-	//				currentState = true;
-	//			if (currentState != m_sdkFunc->moduleStatus)
-	//			{
-	//				qDebug() << "[INFO] " << "moduleStatus changed emit trigged:" << m_sdkFunc->moduleStatus;
-	//				if (currentState == true) //重连成功
-	//				{
-	//					emit trigged(0);
-	//				}
-	//				else //掉线
-	//				{
-	//					emit trigged(1);
-	//				}
-	//				m_sdkFunc->moduleStatus = currentState;
-	//			}
-	//			if (currentState == false) //掉线，重新连接
-	//			{
-	//				if (init())
-	//				{
-	//					qDebug() << "[INFO] " << "moduleStatus changed emit trigged:" << m_sdkFunc->moduleStatus;
-	//					emit trigged(0);
-	//				}
-	//			}
-	//		}
-	//		checkNum = 0;
-	//	}
-	//	Sleep(10);
-	//}
+	while (m_sdkFunc->statusRunning )
+	{
+		if (checkNum++ == 50)
+		{
+			if (m_sdkFunc->sensor != kNULL)
+			{
+				bool currentState = false;
+				int mstate = GoSensor_State(m_sdkFunc->sensor);
+				if (mstate == 6)
+					currentState = false;
+				else
+					currentState = true;
+				if (currentState != m_sdkFunc->CameraStatus)
+				{
+					qDebug() << "[INFO] " << "moduleStatus changed emit trigged:" << m_sdkFunc->CameraStatus;
+					if (currentState == true) //重连成功
+					{
+						emit trigged(0);
+					}
+					else //掉线
+					{
+						emit trigged(1);
+					}
+					m_sdkFunc->CameraStatus = currentState;
+				}
+				if (currentState == false) //掉线，重新连接
+				{
+					if (m_sdkFunc->initSdk(m_sdkFunc->ParasValueMap))
+					{
+						qDebug() << "[INFO] " << "moduleStatus changed emit trigged:" << m_sdkFunc->CameraStatus;
+						emit trigged(0);
+					}
+				}
+			}
+			checkNum = 0;
+		}
+		Sleep(10);
+	}
 }
 
 bool create(const QString& DeviceSn, const QString& name, const QString& path)
@@ -528,11 +529,16 @@ QStringList getCameraSnList()
 	return temp;
 }
 
-
 CameraFunSDKfactoryCls::CameraFunSDKfactoryCls(QString sn, QString path, QObject* parent)
 	: k32u_id(sn.toUShort()), parent(parent), RootPath(path)
 {
 
+}
+
+CameraFunSDKfactoryCls::~CameraFunSDKfactoryCls()
+{
+	this->disconnect();
+	CloseLmi(this);
 }
 
 void CameraFunSDKfactoryCls::upDateParam()
