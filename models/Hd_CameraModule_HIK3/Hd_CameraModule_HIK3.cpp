@@ -1,5 +1,7 @@
 ﻿#include "Hd_CameraModule_HIK3.h"
 #pragma execution_character_set("utf-8")
+const QByteArray FirstCreateByte(R"({"OneSgnalsGetImageCounts": "1","SeralNum": "","OneGetImageTimeOut": "","LastUpdateTime": "","TriggerSource": "hard"})");
+
 struct OnePb
 {
 	PbGlobalObject* base = nullptr;
@@ -8,6 +10,93 @@ struct OnePb
 };
 QMap<QString, OnePb>  TotalMap;
 MV_CC_DEVICE_INFO_LIST m_stDevList;//相机设备
+bool createAndWritefile(const QString& filename, const QByteArray& writeByte)
+{
+	QString path = filename.toLocal8Bit();
+	path = path.mid(0, path.lastIndexOf("/"));
+	QDir dir(path);
+	dir.mkpath(dir.path());
+	QFile file(filename);
+	if (file.exists())
+	{
+		if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Append)) {
+			qWarning() << "错误,无法创建文件" << filename << file.errorString();
+			return false;
+		}
+	}
+	else
+	{
+		if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
+			qWarning() << "错误,无法创建文件" << filename << file.errorString();
+			return false;
+		}
+	}
+	QTextStream out(&file);
+	out.setCodec("utf-8");
+	//for (auto str : inputData)
+	{
+		out << writeByte;
+	}
+	file.close();
+	return true;
+}
+
+QJsonObject load_JsonFile(QString filename)
+{
+	QString json_cfg_file_path = filename;
+
+	QJsonObject json_object;
+	try
+	{
+		QJsonParseError jsonError;
+		if (json_cfg_file_path.isEmpty())
+		{
+			qCritical() << __FUNCTION__ << " line:" << __LINE__ << " JsonPath is null!";
+			return json_object;
+		}
+
+		QFile JsonFile;
+		JsonFile.setFileName(json_cfg_file_path);
+		//if (!JsonFile.isReadable())
+		//{
+		//    qCritical() << __FUNCTION__ << " line:" << __LINE__ << " camera_Example.json not isReadable!";
+		//    //return json_object;
+		//}
+		JsonFile.open(QIODevice::ReadOnly);
+
+		QByteArray m_Byte = JsonFile.readAll();
+		if (m_Byte.isEmpty())
+		{
+			qDebug() << __FUNCTION__ << " line:" << __LINE__ << json_cfg_file_path + " Content is empty";
+			JsonFile.close();
+			return json_object;
+		}
+
+		QJsonDocument jsonDocument(QJsonDocument::fromJson(m_Byte, &jsonError));
+
+		if (!jsonDocument.isNull() && jsonError.error == QJsonParseError::NoError)
+		{
+			if (jsonDocument.isObject())
+			{
+				json_object = jsonDocument.object();
+				JsonFile.close();
+				return json_object;
+			}
+		}
+		else
+		{
+			qCritical() << __FUNCTION__ << " line:" << __LINE__ << json_cfg_file_path + " is error!";
+		}
+		JsonFile.close();
+
+	}
+	catch (QString ev)
+	{
+		qCritical() << __FUNCTION__ << " line:" << __LINE__ << " ev:" << ev;
+	}
+	return json_object;
+}
+
 void __stdcall ReconnectDevice(unsigned int nMsgType, void* pUser0);
 
 void __stdcall ImageCallBackEx(unsigned char* pData0, MV_FRAME_OUT_INFO_EX* pFrameInfo0, void* pUser0);
@@ -222,15 +311,27 @@ bool cameraFunSDKfactoryCls::initSdk(QMap<QString, QString>& insideValuesMaps)
 	m_MV_CAM_TRIGGER_SOURCE = (MV_CAM_TRIGGER_SOURCE)stEnumValue.nCurValue;
 	//qDebug() << stEnumValue.nCurValue;
 	return true;
-	//m_MV_CAM_TRIGGER_SOURCE = stEnumValue[0]
-   //MV_CC_GetEnumValue(handle, "TriggerSource", m_MV_CAM_TRIGGER_SOURCE);
 
 }
+
+void cameraFunSDKfactoryCls::upDateParam()
+{
+	return;
+}
 //类创建
-Hd_CameraModule_HIK3::Hd_CameraModule_HIK3(QString sn, int settype, QObject* parent) : PbGlobalObject(settype, parent), Sncode(sn)
+Hd_CameraModule_HIK3::Hd_CameraModule_HIK3(QString sn,QString path, int settype, QObject* parent) 
+	: PbGlobalObject(settype, parent), Sncode(sn),RootPath(path)
 {
 	famliy = CAMERA2D;
-	m_sdkFunc = new  cameraFunSDKfactoryCls(Sncode);
+	JsonFilePath = RootPath + Sncode + ".json";
+	if (!QFile(JsonFilePath).exists())
+		createAndWritefile(JsonFilePath, FirstCreateByte);
+	QJsonObject paramObj = load_JsonFile(JsonFilePath);
+	for (auto objStr : paramObj.keys())
+	{
+		ParasValueMap.insert(objStr, paramObj.value(objStr).toString());
+	}
+	m_sdkFunc = new  cameraFunSDKfactoryCls(Sncode, RootPath);
 	connect(m_sdkFunc, &cameraFunSDKfactoryCls::trigged, this, [=](int value) {emit trigged(value); });
 }
 
@@ -253,6 +354,8 @@ QMap<QString, QString> Hd_CameraModule_HIK3::parameters()
 bool Hd_CameraModule_HIK3::setParameter(const QMap<QString, QString>& ParameterMap)
 {
 	ParasValueMap = ParasValueMap;
+
+	m_sdkFunc->upDateParam();
 	return true;
 }
 
@@ -340,72 +443,12 @@ void Hd_CameraModule_HIK3::cancelCallBackFun(PBGLOBAL_CALLBACK_FUN callBackFun, 
 	return;
 }
 
-QJsonObject Hd_CameraModule_HIK3::load_camera_Example()
-{
-	QDir dir = QCoreApplication::applicationDirPath();
-	QString currPath = dir.path();
-	currPath = "../runtime/Bin_DEVICE";
-	QString json_cfg_file_path = currPath + "/camera_Example.json";
-
-	QJsonObject json_object;
-	try
-	{
-		QJsonParseError jsonError;
-		if (json_cfg_file_path.isEmpty())
-		{
-			qCritical() << __FUNCTION__ << " line:" << __LINE__ << " JsonPath is null!";
-			return json_object;
-		}
-
-		QFile JsonFile;
-		JsonFile.setFileName(json_cfg_file_path);
-		//if (!JsonFile.isReadable())
-		//{
-		//    qCritical() << __FUNCTION__ << " line:" << __LINE__ << " camera_Example.json not isReadable!";
-		//    //return json_object;
-		//}
-		JsonFile.open(QIODevice::ReadOnly);
-
-		QByteArray m_Byte = JsonFile.readAll();
-		if (m_Byte.isEmpty())
-		{
-			qDebug() << __FUNCTION__ << " line:" << __LINE__ << json_cfg_file_path + " Content is empty";
-			JsonFile.close();
-			return json_object;
-		}
-
-		QJsonDocument jsonDocument(QJsonDocument::fromJson(m_Byte, &jsonError));
-
-		if (!jsonDocument.isNull() && jsonError.error == QJsonParseError::NoError)
-		{
-			if (jsonDocument.isObject())
-			{
-				json_object = jsonDocument.object();
-				JsonFile.close();
-				return json_object;
-			}
-		}
-		else
-		{
-			qCritical() << __FUNCTION__ << " line:" << __LINE__ << json_cfg_file_path + " is error!";
-		}
-		JsonFile.close();
-
-	}
-	catch (QString ev)
-	{
-		qCritical() << __FUNCTION__ << " line:" << __LINE__ << " ev:" << ev;
-	}
-	return json_object;
-}
-
 bool create(const QString& DeviceSn, const QString& name, const QString& path)
 {
-	//if (name.split(':').last() == "old") return true;
 	if (DeviceSn.isEmpty() || name.isEmpty() || path.isEmpty())
 		return false;
 	OnePb temp;
-	temp.base = new Hd_CameraModule_HIK3(DeviceSn);
+	temp.base = new Hd_CameraModule_HIK3(DeviceSn, path+"/Hd_CameraModule_HIK3/"  );
 	if (!temp.base->init())
 		return false;
 	temp.baseWidget = new mPrivateWidget(temp.base);
@@ -468,8 +511,6 @@ QStringList getCameraSnList()
 	}
 	return temp;
 }
-
-
 
 QString byteArrayToUnicode(const QByteArray array) {
 

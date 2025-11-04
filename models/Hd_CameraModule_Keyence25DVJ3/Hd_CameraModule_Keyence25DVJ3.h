@@ -96,6 +96,7 @@ public:
 public:
     cameraFunSDKfactoryCls(QString sn,QString RootPath);
     ~cameraFunSDKfactoryCls();
+    void upDateParam();
     bool initSdk(QMap<QString, QString>& insideValuesMaps);
     bool setParamMap(const QMap<QString, QString>& ParasValueMap);
     bool Connect(string name);

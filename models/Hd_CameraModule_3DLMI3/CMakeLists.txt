@@ -3,8 +3,9 @@ get_filename_component(CURRENT_FOLDER ${CMAKE_CURRENT_SOURCE_DIR} NAME)
 string(TIMESTAMP RUN_TIME)
 message( " model start : " ${CURRENT_FOLDER}:${RUN_TIME})
 
-set(DLL_NAMES "LMI" "opencv" "qt5")
-foreach(child ${DLL_NAMES})         
+set(DLL_NAMES "LMI" "opencv")
+foreach(child ${DLL_NAMES})
+            
     LIST(APPEND ENV_INCLUDE ${${child}_include})
     LIST(APPEND ENV_LIB ${${child}_lib})
     LIST(APPEND ENV_TARGET ${${child}_target_link})         
@@ -13,7 +14,6 @@ message("   ENV_INCLUDE : " ${ENV_INCLUDE} )
 message("   ENV_LIB : " ${ENV_LIB} )
 message("   ENV_TARGET : " ${ENV_TARGET} )
 include_directories(
-
     ${ENV_INCLUDE}
     )
 
@@ -55,9 +55,13 @@ set_target_properties(${CURRENT_FOLDER} PROPERTIES LINKER_LANGUAGE C
     )
 
 
+find_package(Qt5 COMPONENTS ${qtlist} REQUIRED )
+foreach(item ${qtlist})
+    list(APPEND lib_list Qt5::${item})
+endforeach()
 target_link_libraries(${CURRENT_FOLDER} PRIVATE
     ${ENV_TARGET}
-    Qt${QT_VERSION_MAJOR}::Core
+    ${lib_list}
     )
 
 

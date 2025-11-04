@@ -205,6 +205,7 @@ endif()
 ##
 if(BUILD_EXAMPLES)
   #add_subdirectory(CppCode)
+  add_subdirectory(test)
 endif()
 
 

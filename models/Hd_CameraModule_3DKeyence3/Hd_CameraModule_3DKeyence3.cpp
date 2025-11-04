@@ -23,7 +23,61 @@ y_pitch_um y方向精度
 OneceGetImageCounts 一次出图数量 (一般是两张，一张亮度图，一张高度图)
 */
 
+QJsonObject load_JsonFile(QString filename)
+{
+	QString json_cfg_file_path = filename;
 
+	QJsonObject json_object;
+	try
+	{
+		QJsonParseError jsonError;
+		if (json_cfg_file_path.isEmpty())
+		{
+			qCritical() << __FUNCTION__ << " line:" << __LINE__ << " JsonPath is null!";
+			return json_object;
+		}
+
+		QFile JsonFile;
+		JsonFile.setFileName(json_cfg_file_path);
+		//if (!JsonFile.isReadable())
+		//{
+		//    qCritical() << __FUNCTION__ << " line:" << __LINE__ << " camera_Example.json not isReadable!";
+		//    //return json_object;
+		//}
+		JsonFile.open(QIODevice::ReadOnly);
+
+		QByteArray m_Byte = JsonFile.readAll();
+		if (m_Byte.isEmpty())
+		{
+			qDebug() << __FUNCTION__ << " line:" << __LINE__ << json_cfg_file_path + " Content is empty";
+			JsonFile.close();
+			return json_object;
+		}
+
+		QJsonDocument jsonDocument(QJsonDocument::fromJson(m_Byte, &jsonError));
+
+		if (!jsonDocument.isNull() && jsonError.error == QJsonParseError::NoError)
+		{
+			if (jsonDocument.isObject())
+			{
+				json_object = jsonDocument.object();
+				JsonFile.close();
+				return json_object;
+			}
+		}
+		else
+		{
+			qCritical() << __FUNCTION__ << " line:" << __LINE__ << json_cfg_file_path + " is error!";
+		}
+		JsonFile.close();
+
+	}
+	catch (QString ev)
+	{
+		qCritical() << __FUNCTION__ << " line:" << __LINE__ << " ev:" << ev;
+	}
+	return json_object;
+}
 bool createAndWritefile(const QString& filename, const QByteArray& writeByte)
 {
 	QString path = filename.toLocal8Bit();
@@ -123,7 +177,8 @@ void Hd_CameraModule_3DKeyence3::cancelCallBackFun(PBGLOBAL_CALLBACK_FUN callBac
 	}
 	return;
 }
-cameraFunSDKfactoryCls::cameraFunSDKfactoryCls(int id, QString RootPath, QObject* praent) :deviceId(id), parent(praent), RootPath(RootPath)
+cameraFunSDKfactoryCls::cameraFunSDKfactoryCls(int id, QString RootPath, QObject* praent) 
+	:deviceId(id), parent(praent), RootPath(RootPath)
 {
 
 }
@@ -383,63 +438,7 @@ Hd_CameraModule_3DKeyence3::~Hd_CameraModule_3DKeyence3()
 
 QMap<QString, QString> Hd_CameraModule_3DKeyence3::parameters()
 {
-	return ParasValueMap;
-}
-
-QJsonObject Hd_CameraModule_3DKeyence3::load_JsonFile(QString filename)
-{
-	QString json_cfg_file_path = filename;
-
-	QJsonObject json_object;
-	try
-	{
-		QJsonParseError jsonError;
-		if (json_cfg_file_path.isEmpty())
-		{
-			qCritical() << __FUNCTION__ << " line:" << __LINE__ << " JsonPath is null!";
-			return json_object;
-		}
-
-		QFile JsonFile;
-		JsonFile.setFileName(json_cfg_file_path);
-		//if (!JsonFile.isReadable())
-		//{
-		//    qCritical() << __FUNCTION__ << " line:" << __LINE__ << " camera_Example.json not isReadable!";
-		//    //return json_object;
-		//}
-		JsonFile.open(QIODevice::ReadOnly);
-
-		QByteArray m_Byte = JsonFile.readAll();
-		if (m_Byte.isEmpty())
-		{
-			qDebug() << __FUNCTION__ << " line:" << __LINE__ << json_cfg_file_path + " Content is empty";
-			JsonFile.close();
-			return json_object;
-		}
-
-		QJsonDocument jsonDocument(QJsonDocument::fromJson(m_Byte, &jsonError));
-
-		if (!jsonDocument.isNull() && jsonError.error == QJsonParseError::NoError)
-		{
-			if (jsonDocument.isObject())
-			{
-				json_object = jsonDocument.object();
-				JsonFile.close();
-				return json_object;
-			}
-		}
-		else
-		{
-			qCritical() << __FUNCTION__ << " line:" << __LINE__ << json_cfg_file_path + " is error!";
-		}
-		JsonFile.close();
-
-	}
-	catch (QString ev)
-	{
-		qCritical() << __FUNCTION__ << " line:" << __LINE__ << " ev:" << ev;
-	}
-	return json_object;
+	return  m_sdkFunc->ParasValueMap;
 }
 
 bool Hd_CameraModule_3DKeyence3::setParameter(const QMap<QString, QString>& ParameterMap)
@@ -495,7 +494,7 @@ bool Hd_CameraModule_3DKeyence3::setData(const std::vector<cv::Mat>& mats, const
 //获取数据
 bool Hd_CameraModule_3DKeyence3::data(std::vector<cv::Mat>& ImgS, QStringList& QStringListdata)
 {
-	m_sdkFunc->ImageMats.wait_for_pop(3000, ImgS);
+	m_sdkFunc->ImageMats.wait_for_pop(m_sdkFunc->timeout_ms, ImgS);
 	if (ImgS.empty())
 	{
 		ImgS.push_back(cv::Mat::zeros(100, 100, 0));

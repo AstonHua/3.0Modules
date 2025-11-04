@@ -2,6 +2,7 @@
 #include <pbglobalobject.h>
 #include <QApplication>
 #include <qDebug>
+#include <QWidget>
 #include <qmainwindow.h>
 using CreateFuncPtr = bool (*)(const QString&, const QString&, const QString&);
 using destroyFuncPtr = void (*)(const QString& name);
@@ -13,7 +14,7 @@ int main(int argc, char* argv[])
 {
 	QApplication a(argc, argv);
 
-	QLibrary* m_lib = new QLibrary("./Hd_CameraModule_HIK3.dll");
+	QLibrary* m_lib = new QLibrary("./Hd_CameraModule_3DLMI3.dll");
 	bool flag = m_lib->load();
 	if (!m_lib->isLoaded())
 	{

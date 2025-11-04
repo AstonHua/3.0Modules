@@ -11,7 +11,7 @@ foreach(dll ${OUR_LIBS})
 endforeach(dll ${})
 
 
-set(DLL_NAMES "halcon" "opencv" "json" "handdleAI")
+set(DLL_NAMES "opencv"  )
 foreach(child ${DLL_NAMES})         
     LIST(APPEND ENV_INCLUDE ${${child}_include})
     LIST(APPEND ENV_LIB ${${child}_lib})

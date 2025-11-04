@@ -61,9 +61,10 @@ public:
     void upDateParam();
 public:
     QString RootPath;//家目录
+    QObject* parent = nullptr;
     std::atomic_bool allowflag;
     ThreadSafeQueue<vector<cv::Mat>> ImageMats;//图像缓存队列
-    QObject* parent = nullptr;
+
     bool  run();
     QVector<CallbackFuncPack> CallbackFuncVec;
     LJX8IF_HIGH_SPEED_PRE_START_REQ* startReq_ptr = nullptr;
@@ -114,9 +115,6 @@ public:
     QMap<QString, QString> parameters();
     //初始化(加载模块到内存)
     bool init();
-
-    //加载示例参数
-    QJsonObject load_JsonFile(QString);
 
     //设置数据
     //相机：第一张图的参数，QStringList：00 曝光值 增益值；

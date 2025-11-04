@@ -949,6 +949,12 @@ cameraFunSDKfactoryCls::~cameraFunSDKfactoryCls()
 	Disconnect();
 }
 
+void cameraFunSDKfactoryCls::upDateParam()
+{
+	GetImageNums = ParasValueMap.value("OneSgnalsGetImageCounts").toInt();
+	MaxTimeOut = ParasValueMap.value("OneGetImageTimeOut").toInt();
+}
+
 bool cameraFunSDKfactoryCls::initSdk(QMap<QString, QString>& insideValuesMaps)
 {
 	//QString jsonpath = insideValuesMaps["jsonPath"];
@@ -1008,8 +1014,9 @@ bool cameraFunSDKfactoryCls::initSdk(QMap<QString, QString>& insideValuesMaps)
 bool cameraFunSDKfactoryCls::setParamMap(const QMap<QString, QString>& ParasValueMap)
 {
 	this->ParasValueMap = ParasValueMap; 
-	GetImageNums = ParasValueMap.value("OneSgnalsGetImageCounts").toInt();
-	MaxTimeOut = ParasValueMap.value("OneGetImageTimeOut").toInt();
+
+	upDateParam();
+	
 	return true;
 }
 
@@ -1060,7 +1067,7 @@ Hd_25DCameraVJ_module::Hd_25DCameraVJ_module(QString SnName,QString path,int set
 {
 	famliy = PGOFAMLIY::CAMERA2_5D;
 	//RootPath = RootPath + "/Hd_CameraModule_3DKeyence3/";
-	JsonFilePath = RootPath+ + SnName + ".json";
+	JsonFilePath = RootPath + SnName + ".json";
 	if (!QFile(JsonFilePath).exists())
 		createAndWritefile(JsonFilePath, FirstCreateByte);
 	QJsonObject paramObj = load_JsonFile(JsonFilePath);
@@ -1268,7 +1275,7 @@ bool create(const QString& DeviceSn, const QString& name, const QString& path)
 	if (DeviceSn.isEmpty() || name.isEmpty() || path.isEmpty())
 		return false;
 	OnePb temp;
-	temp.base = new Hd_25DCameraVJ_module(DeviceSn, path+"/Hd_CameraModule_Keyence25DVJ3");
+	temp.base = new Hd_25DCameraVJ_module(DeviceSn, path+"/Hd_CameraModule_Keyence25DVJ3/");
 	temp.baseWidget = new mPrivateWidget(temp.base);
 	temp.base->registerCallBackFun(GetCallbackMat, temp.baseWidget,"0");
 	temp.DeviceSn = DeviceSn;

@@ -47,10 +47,12 @@ class cameraFunSDKfactoryCls : public QObject
 {
     Q_OBJECT
 public:
-    explicit cameraFunSDKfactoryCls(QString Sn, QObject* parent = nullptr) : QObject(parent), SnCode(Sn.toStdString()) {}
+    explicit cameraFunSDKfactoryCls(QString Sn, QString path ,QObject* parent = nullptr)
+		: QObject(parent), SnCode(Sn.toStdString()),RootPath(path) {}
     ~cameraFunSDKfactoryCls();
     bool initSdk(QMap<QString, QString>& insideValuesMaps);
 	void* getHandle() { return handle; }
+	void upDateParam();
     void* handle = nullptr;//相机句柄
     ThreadSafeQueue<cv::Mat> MatQueue;
     QVector<CallbackFuncPack> CallbackFuncVec;
@@ -58,6 +60,9 @@ public:
     int Currentindex = 0;
     string Username;
     string SnCode;
+	QString RootPath;
+	QMap<QString, QString> ParasValueMap;
+
     MV_CAM_TRIGGER_SOURCE m_MV_CAM_TRIGGER_SOURCE;//触发方式
 signals:
 	void trigged(int);
@@ -68,7 +73,7 @@ class  Hd_CameraModule_HIK3 :public PbGlobalObject
     Q_OBJECT
 public:
     //1、创建：赋值给famliy
-    explicit Hd_CameraModule_HIK3(QString sn,int settype = -1, QObject* parent = nullptr);//对应哪个品牌相机(触发方式)/通信
+    explicit Hd_CameraModule_HIK3(QString sn, QString path ,int settype = -1, QObject* parent = nullptr);//对应哪个品牌相机(触发方式)/通信
     ~Hd_CameraModule_HIK3();
     //#######################通用函数#######################
     bool setParameter(const QMap<QString, QString>&);
@@ -86,6 +91,7 @@ public:
     QJsonObject load_camera_Example();
     QString Sncode;
 	QString RootPath;
+	QString JsonFilePath;
     cameraFunSDKfactoryCls* m_sdkFunc =nullptr;
     QMap<QString, QString> ParasValueMap;
 signals:
