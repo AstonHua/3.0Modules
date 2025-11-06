@@ -1,41 +1,29 @@
-#ifndef Hd_CameraModule_HIK3_H
-#define Hd_CameraModule_HIK3_H
+#ifndef Hd_CameraModule_DaHua3_H
+#define Hd_CameraModule_DaHua3_H
 
 #include <QtCore/qglobal.h>
 
 #include<opencv2/opencv.hpp>
-#include <MvCameraControl.h>
-#include <opencv.hpp>
 #include <QByteArray>
 #include <QDebug>
-#include<iostream>
+#include <iostream>
 #include <Windows.h>
-#include <time.h>
-#include <QThread>
-#include <QtConcurrent/qtconcurrent>
-#include <qfuture.h>
-#include "qjsonobject.h"
-#include "qjsonarray.h"
-#include "qjsondocument.h"
-#include "QLibrary.h"
-#include "QMetaType.h"
-#include "QDateTime.h"
-#include "QMutex.h"
-#include "QQueue.h"
-#include "QMap.h"
-#include "QDir.h"
-#include <QJsonParseError>
-#include <QWidget>
-#include <QTextCodec>
-#include <QPushButton>
-#include <imageView.h>
-#include <QGraphicsPixmapItem>
-
-#include "pbglobalobject.h"
+#include <QDateTime>
 #include <ThreadSafeQueue.h>
+#include <pbglobalobject.h>
+//#pragma comment(lib, "MVSDKmd.lib")
+
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <process.h>
+#include "IMVApi.h"
+#include <time.h>
 #include <struct.h>
 using namespace cv;
-using namespace std;
+using namespace  std;
+
 #pragma execution_character_set("utf-8")
 struct CallbackFuncPack
 {
@@ -47,34 +35,31 @@ class CameraFunSDKfactoryCls : public QObject
 {
     Q_OBJECT
 public:
-    explicit CameraFunSDKfactoryCls(QString Sn, QString path ,QObject* parent = nullptr)
-		: QObject(parent), SnCode(Sn.toStdString()),RootPath(path) {}
+    explicit CameraFunSDKfactoryCls(QString Sn, QString path, QObject* parent = nullptr);
     ~CameraFunSDKfactoryCls();
     bool initSdk(QMap<QString, QString>& insideValuesMaps);
-	void* getHandle() { return handle; }
-	void upDateParam();
-    void* handle = nullptr;//相机句柄
+    void* getHandle() const { return devHandle; }
+    void upDateParam() {};
+    IMV_HANDLE devHandle = NULL;//相机句柄
     ThreadSafeQueue<cv::Mat> MatQueue;
     QVector<CallbackFuncPack> CallbackFuncVec;
     std::atomic_bool allowflag;
     int Currentindex = 0;
     string Username;
     string SnCode;
-	QString RootPath;
-	QMap<QString, QString> ParasValueMap;
-
-    MV_CAM_TRIGGER_SOURCE m_MV_CAM_TRIGGER_SOURCE;//触发方式
+    QString RootPath;
+    QMap<QString, QString> ParasValueMap;
+    _IMV_String triggerType;//0,SoftWare;2,Line1;3,Line2;9,Line1andLine2
+    //MV_CAM_TRIGGER_SOURCE m_MV_CAM_TRIGGER_SOURCE;//触发方式
 signals:
-	void trigged(int);
+    void trigged(int);
 
 };
-class  Hd_CameraModule_HIK3 :public PbGlobalObject
+class  Hd_CameraModule_DaHua3 :public PbGlobalObject
 {
-    Q_OBJECT
 public:
-    //1、创建：赋值给famliy
-    explicit Hd_CameraModule_HIK3(QString sn, QString path ,int settype = -1, QObject* parent = nullptr);//对应哪个品牌相机(触发方式)/通信
-    ~Hd_CameraModule_HIK3();
+    Hd_CameraModule_DaHua3(QString sn, QString path, int settype = -1, QObject* parent = nullptr);
+     ~Hd_CameraModule_DaHua3();
     //#######################通用函数#######################
     bool setParameter(const QMap<QString, QString>&);
     QMap<QString, QString> parameters();
@@ -88,17 +73,26 @@ public:
     //注销回调 string对应自身的参数协议 （自定义）--->注销后还得取消连接状态
     void cancelCallBackFun(PBGLOBAL_CALLBACK_FUN, QObject*, const QString&);
 
-    QJsonObject load_camera_Example();
+private:
     QString Sncode;
-	QString RootPath;
-	QString JsonFilePath;
-    CameraFunSDKfactoryCls* m_sdkFunc =nullptr;
+    QString RootPath;
+    QString JsonFilePath;
+    shared_ptr<CameraFunSDKfactoryCls> m_sdkFunc;
     QMap<QString, QString> ParasValueMap;
-signals:
-    void sendMats(cv::Mat);
-
 };
 
+class mPrivateWidget :public QWidget
+{
+    Q_OBJECT;
+public:
+    mPrivateWidget(void*);
+    ~mPrivateWidget() {};
+    void InitWidget();
+    QPushButton* SetDataBtn;
+    ImageViewer* m_showimage;
+    Hd_CameraModule_DaHua3* m_Camerahandle = nullptr;
+
+};
 
 extern "C"
 {
@@ -110,17 +104,4 @@ extern "C"
     //Q_DECL_EXPORT Hd_25DCameraVJ_module * create(int type = -1);
     //Q_DECL_EXPORT void destory(Hd_25DCameraVJ_module * ptr);
 }
-
-class mPrivateWidget :public QWidget
-{
-	Q_OBJECT;
-public:
-	mPrivateWidget(void*);
-	~mPrivateWidget() {};
-	void InitWidget();
-	QPushButton* SetDataBtn;
-	ImageViewer* m_showimage;
-	Hd_CameraModule_HIK3* m_Camerahandle = nullptr;
-
-};
-#endif // Hd_CameraModule_HIK3_H
+#endif // Hd_CameraModule_DaHua3_H

@@ -8,7 +8,13 @@
 #include <QMap>
 #include <QDir>
 #pragma execution_character_set("utf-8")
-const QByteArray FirstCreateByte(R"({"OneSgnalsGetImageCounts": "1","SeralNum": "","OneGetImageTimeOut": "","LastUpdateTime": "","TriggerSource": "hard"})");
+const QByteArray FirstCreateByte
+(R"({"OneSgnalsGetImageCounts": "1",
+"SeralNum": "",
+"OneGetImageTimeOut": "",
+"LastUpdateTime": "",
+"TriggerSource": "hard",
+"OnceImageCounts":"2"})");
 bool createAndWritefile(const QString& filename, const QByteArray& writeByte)
 {
 	QString path = filename.toLocal8Bit();
@@ -1006,6 +1012,7 @@ bool cameraFunSDKfactoryCls::initSdk(QMap<QString, QString>& insideValuesMaps)
 	else
 		qDebug() << __FUNCTION__ << __LINE__ << "hardTrigger";
 	insideValuesMaps["OnceImageCounts"] = QString::number(sImageType.size());
+	insideValuesMaps["ImageIndexType"] = QString::number(sImageType.size());
 	insideValuesMaps["TriggerSource"] = QString::fromStdString(CurrentsTriggerSource);
 	getpicturethread = std::thread(&cameraFunSDKfactoryCls::getPictureThread, this);
 	return true;
@@ -1343,20 +1350,6 @@ QStringList getCameraSnList()
 	}
 
 	return temp;
-}
-
-QImage cvMatToQImage(const cv::Mat& src)
-{
-
-	if (src.channels() == 1) { // if grayscale image
-		return QImage((uchar*)src.data, src.cols, src.rows, static_cast<int>(src.step), QImage::Format_Grayscale8).copy();
-	}
-	if (src.channels() == 3) { // if 3 channel color image
-		cv::Mat rgbMat;
-		cv::cvtColor(src, rgbMat, cv::COLOR_BGR2RGB); // invert BGR to RGB
-		return QImage((uchar*)rgbMat.data, src.cols, src.rows, static_cast<int>(src.step), QImage::Format_RGB888).copy();
-	}
-	return QImage();
 }
 
 mPrivateWidget::mPrivateWidget(void* handle)

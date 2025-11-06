@@ -1,6 +1,7 @@
 ﻿# CMakeList.txt: 顶层 CMake 项目文件，在此处执行全局配置
 # 并包含子项目。
 #
+
 cmake_minimum_required(VERSION 3.0.0)
 project(DemoUI VERSION 0.1.0)
 string(TIMESTAMP RUN_TIME)
@@ -10,7 +11,7 @@ message( " project start : " ${RUN_TIME})
 set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
 set(CMAKE_DISABLE_SOURCE_CHANGES  ON)
 
-set(CMAKE_BUILD_TYPE Release)
+#set(CMAKE_BUILD_TYPE Release)
 
 
 get_directory_property(_has_parent PARENT_DIRECTORY)
@@ -28,7 +29,7 @@ option(BUILD_DEBUG_POSTFIX_D "Append d suffix to debug libraries" OFF)
 
 # 默认生成参数设置
 if(NE_DEVELOPER_DEFAULTS)
-  set(CMAKE_CXX_STANDARD 17)
+  set(CMAKE_CXX_STANDARD 11)
   set(CMAKE_CXX_EXTENSIONS OFF)
   # PROJECT_BINARY_DIR 指build生成所在文件夹
   # PROJECT_SOURCE_DIR 指最外层CMakeLists.txt所在文件夹
@@ -36,6 +37,7 @@ if(NE_DEVELOPER_DEFAULTS)
   set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/bin")
   set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/lib")
   set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/lib")
+  set(CMAKE_GLOBAL_INCLUDE_DIRECTORY "${PROJECT_SOURCE_DIR}/models/GlobalInclude")
   SET(PROJECT_ROOT_PATH ${PROJECT_SOURCE_DIR})
 
   message("params" PROJECT_BINARY_DIR)
@@ -145,25 +147,41 @@ if(ON)
                     SET( ${child}_target_link 
                         "halcon"
                         "halconcpp"
-                        "hdevenginecpp"     )                
+                        "hdevenginecpp"     )
+                elseif(${child} MATCHES "CSTLightSource")
+                    SET( ${child}_target_link 
+                        "CommonToolDll"
+                        "ControllerDll"
+                        "sControllerDll" )
+                elseif(${child} MATCHES "taskLoad")
+                    SET( ${child}_target_link 
+                        "CPPTaskLoader" )                   
                 elseif(${child} MATCHES "handdleAI")
                    if(CMAKE_BUILD_TYPE MATCHES "Debug")
-                        SET( ${child}_target_link "handleAId" )
-                    else()
                         SET( ${child}_target_link "handleAI" )
-                    endif()     		
+                    else()
+                        SET( ${child}_target_link "handleAI"  )
+                    endif()     	
                 elseif(${child} MATCHES "mvs")
                         SET( ${child}_target_link "MvCameraControl" )
                 elseif(${child} MATCHES "keyence2_5D")
-                    SET( ${child}_target_link  "kglib" )  
+                        SET( ${child}_target_link "kglib" )
+                elseif(${child} MATCHES "GoLMI")
+					   SET( ${child}_target_link 
+                          "GoApi" 
+                          "kApi"
+                          "GoPxLSdk")
                 elseif(${child} MATCHES "keyence3D")
+					    SET( ${child}_target_link 
+                          "LJX8_IF"  )
+                elseif(${child} MATCHES "dahua")
                     SET( ${child}_target_link 
-                        "LJX8_IF" )
+                        "MVSDKmd" )
                 endif()
                 message(${child}_target_link: ${${child}_target_link})
             endforeach()
 
-            # QT path qt5.14.2
+            # QT path qt5.15.2
             
             set(Qt5_DIR ${PROJECT_ROOT_PATH}/env/qt5.15.2/lib/cmake/Qt5)
             set(QT_DIR ${Qt5_DIR})
@@ -199,6 +217,7 @@ endif()
 if(BUILD_MODULES)
    add_subdirectory(models)
 endif()
+
 # 包含子项目。
 ##################
 # Automated examples
@@ -207,8 +226,6 @@ if(BUILD_EXAMPLES)
   #add_subdirectory(CppCode)
   add_subdirectory(test)
 endif()
-
-
 #install(FILES python_code/script.py DESTINATION ${CMAKE_INSTALL_PREFIX}/python_code)
 #add_subdirectory(pycode)
 add_compile_options("$<$<C_COMPILER_ID:MSVC>:/utf-8>")

@@ -3,14 +3,23 @@
 #include <QTextCodec>
 #include <qqueue.h>
 #include <QWidget>
-const QByteArray FirstCreateByte(R"({"DeviceId": "0",
-  "GetOnceImageTimes": "5000",
-  "Ip": "192.168.0.1",
-  "Port": "24691",
-  "xImageSize": "3200",
-  "yImageSize": "1000",
-  "y_pitch_um": "20.0",
-  "OneceGetImageCounts": "2"})");
+#include <QProcess>
+#include <QNetworkInterface>
+QString byteArrayToUnicode(const QByteArray array) {
+
+	// state用于保存转换状态，它的成员invalidChars，可用来判断是否转换成功
+	// 如果转换成功，则值为0，如果值大于0，则说明转换失败
+	QTextCodec::ConverterState state;
+	// 先尝试使用utf-8的方式把QByteArray转换成QString
+	QString text = QTextCodec::codecForName("UTF-8")->toUnicode(array.constData(), array.size(), &state);
+	// 如果转换时无效字符数量大于0，说明编码格式不对
+	if (state.invalidChars > 0)
+	{
+		// 再尝试使用GBK的方式进行转换，一般就能转换正确(当然也可能是其它格式，但比较少见了)
+		text = QTextCodec::codecForName("GBK")->toUnicode(array);
+	}
+	return text;
+}
 //初始化数据，创建json文件数据
 /*
 DeviceId  设备ID，在数组中的位置
@@ -22,8 +31,53 @@ yImageSize 图像y方向长度(高)
 y_pitch_um y方向精度
 OneceGetImageCounts 一次出图数量 (一般是两张，一张亮度图，一张高度图)
 */
+QStringList getConnectedDevicesFromARP() {
+	QStringList devices;
+	//QTextCodec* codec = QTextCodec::codecForName("GBK");
+	//QTextCodec::setCodecForLocale(codec);
+#ifdef Q_OS_WIN
+	// Windows系统 - 使用 arp -a 命令
+	QProcess process;
+	process.start("arp", QStringList() << "-a");
+	process.waitForFinished();
+	QString output = byteArrayToUnicode(process.readAllStandardOutput());
+	//QString output = QString::fromLocal8Bit(process.readAllStandardOutput());
+	qDebug() << output;
+	// 解析ARP表输出，格式如: 192.168.1.2    00-11-22-33-44-55    动态
+	QRegularExpression regex(R"((\d+\.\d+\.\d+\.\d+)\s+([0-9a-fA-F-]+)\s+(动态|静态))");
+	QRegularExpressionMatchIterator matches = regex.globalMatch(output);
 
-QJsonObject load_JsonFile(QString filename)
+	while (matches.hasNext()) {
+		QRegularExpressionMatch match = matches.next();
+		QString ip = match.captured(1);
+		// 排除本机IP和广播地址
+		if (!ip.endsWith(".255") && !ip.endsWith(".0")) {
+			devices << ip;
+		}
+	}
+
+#elif defined(Q_OS_LINUX) || defined(Q_OS_MAC)
+	// Linux/Mac系统 - 使用 arp -n 命令
+	QProcess process;
+	process.start("arp", QStringList() << "-n");
+	process.waitForFinished();
+	QString output = process.readAllStandardOutput();
+
+	// 解析ARP表输出
+	QRegularExpression regex(R"((\d+\.\d+\.\d+\.\d+)\s+\S+\s+\S+\s+([0-9a-fA-F:]+))");
+	QRegularExpressionMatchIterator matches = regex.globalMatch(output);
+
+	while (matches.hasNext()) {
+		QRegularExpressionMatch match = matches.next();
+		QString ip = match.captured(1);
+		devices << ip;
+	}
+#endif
+
+	return devices;
+}
+
+QJsonObject load_JsonObjectFile(QString filename)
 {
 	QString json_cfg_file_path = filename;
 
@@ -78,6 +132,61 @@ QJsonObject load_JsonFile(QString filename)
 	}
 	return json_object;
 }
+QJsonArray load_JsonArrayFile(QString filename)
+{
+	QString json_cfg_file_path = filename;
+
+	QJsonArray JaonArray;
+	try
+	{
+		QJsonParseError jsonError;
+		if (json_cfg_file_path.isEmpty())
+		{
+			qCritical() << __FUNCTION__ << " line:" << __LINE__ << " JsonPath is null!";
+			return JaonArray;
+		}
+
+		QFile JsonFile;
+		JsonFile.setFileName(json_cfg_file_path);
+		//if (!JsonFile.isReadable())
+		//{
+		//    qCritical() << __FUNCTION__ << " line:" << __LINE__ << " camera_Example.json not isReadable!";
+		//    //return json_object;
+		//}
+		JsonFile.open(QIODevice::ReadOnly);
+
+		QByteArray m_Byte = JsonFile.readAll();
+		if (m_Byte.isEmpty())
+		{
+			qDebug() << __FUNCTION__ << " line:" << __LINE__ << json_cfg_file_path + " Content is empty";
+			JsonFile.close();
+			return JaonArray;
+		}
+
+		QJsonDocument jsonDocument(QJsonDocument::fromJson(m_Byte, &jsonError));
+
+		if (!jsonDocument.isNull() && jsonError.error == QJsonParseError::NoError)
+		{
+			if (jsonDocument.isArray())
+			{
+				JaonArray = jsonDocument.array();
+				JsonFile.close();
+				return JaonArray;
+			}
+		}
+		else
+		{
+			qCritical() << __FUNCTION__ << " line:" << __LINE__ << json_cfg_file_path + " is error!";
+		}
+		JsonFile.close();
+
+	}
+	catch (QString ev)
+	{
+		qCritical() << __FUNCTION__ << " line:" << __LINE__ << " ev:" << ev;
+	}
+	return JaonArray;
+}
 bool createAndWritefile(const QString& filename, const QByteArray& writeByte)
 {
 	QString path = filename.toLocal8Bit();
@@ -114,9 +223,11 @@ struct OnePb
 	PbGlobalObject* base = nullptr;
 	QWidget* baseWidget = nullptr;
 	QString DeviceSn;
+	QString ip;
+	QString index;
 };
 QMap<QString, OnePb>  TotalMap;
-
+QVector<QPair<QString,QString>>TotalSnIpVec;
 
 
 const int MAX_LJXA_XDATANUM = 3200;
@@ -129,21 +240,6 @@ int _lastImageSizeHeight[MAX_LJXA_DEVICENUM];
 int _highSpeedPortNo[MAX_LJXA_DEVICENUM];
 LJX8IF_ETHERNET_CONFIG _ethernetConfig[MAX_LJXA_DEVICENUM];
 LJXA_ACQ_GETPARAM _getParam[MAX_LJXA_DEVICENUM];
-QString byteArrayToUnicode(const QByteArray array) {
-
-	// state用于保存转换状态，它的成员invalidChars，可用来判断是否转换成功
-	// 如果转换成功，则值为0，如果值大于0，则说明转换失败
-	QTextCodec::ConverterState state;
-	// 先尝试使用utf-8的方式把QByteArray转换成QString
-	QString text = QTextCodec::codecForName("UTF-8")->toUnicode(array.constData(), array.size(), &state);
-	// 如果转换时无效字符数量大于0，说明编码格式不对
-	if (state.invalidChars > 0)
-	{
-		// 再尝试使用GBK的方式进行转换，一般就能转换正确(当然也可能是其它格式，但比较少见了)
-		text = QTextCodec::codecForName("GBK")->toUnicode(array);
-	}
-	return text;
-}
 //注册回调 string对应自身的参数协议 （自定义）
 void Hd_CameraModule_3DKeyence3::registerCallBackFun(PBGLOBAL_CALLBACK_FUN callBackFun, QObject* parent, const QString& getString)
 {
@@ -180,7 +276,6 @@ void Hd_CameraModule_3DKeyence3::cancelCallBackFun(PBGLOBAL_CALLBACK_FUN callBac
 cameraFunSDKfactoryCls::cameraFunSDKfactoryCls(int id, QString RootPath, QObject* praent) 
 	:deviceId(id), parent(praent), RootPath(RootPath)
 {
-
 }
 cameraFunSDKfactoryCls::~cameraFunSDKfactoryCls()
 {
@@ -246,7 +341,7 @@ bool cameraFunSDKfactoryCls::initSdk(QMap<QString, QString>& insideValuesMaps)
 {
 
 	timeout_ms = insideValuesMaps.value("GetOnceImageTimes").toInt();
-	QStringList IpList = insideValuesMaps.value("GetOnceImageTimes").split('.');
+	QStringList IpList = insideValuesMaps.value("Ip").split('.');
 	if (IpList.size() != 4)
 		return false;
 	EthernetConfig.abyIpAddress[0] = IpList.at(0).toInt();
@@ -292,7 +387,9 @@ bool cameraFunSDKfactoryCls::initSdk(QMap<QString, QString>& insideValuesMaps)
 		}
 		return false;
 	}
-
+	//char pControllerSerialNo [20] ; char pHeadSerialNo[20];
+	//LJX8IF_GetSerialNumber(deviceId, pControllerSerialNo, pHeadSerialNo);
+	//qDebug() << pControllerSerialNo << pHeadSerialNo;
 	isopen = true;
 
 	// Allocate memory
@@ -406,17 +503,26 @@ void cameraFunSDKfactoryCls::LJXA_ACQ_CloseDevice(int lDeviceId)
 	qDebug() << __FUNCTION__ << " line:" << __LINE__ << "  Close device!";
 }
 
-Hd_CameraModule_3DKeyence3::Hd_CameraModule_3DKeyence3(int DevicedID, QString RootPath, int settype, QObject* parent) : 
-	PbGlobalObject(settype, parent), deviceId(DevicedID), RootPath(RootPath)
+Hd_CameraModule_3DKeyence3::Hd_CameraModule_3DKeyence3(int DevicedID,QString ip, QString RootPath, int settype, QObject* parent) :
+	PbGlobalObject(settype, parent), deviceId(DevicedID), RootPath(RootPath),ip(ip)
 {
+
 	famliy = PGOFAMLIY::CAMERA3D;
-	CHAR* pControllerSerialNo = nullptr; CHAR* pHeadSerialNo = nullptr;
+	char pControllerSerialNo[20]; char pHeadSerialNo[20];
 	LJX8IF_GetSerialNumber(DevicedID, pControllerSerialNo, pHeadSerialNo);
 	SnName = pHeadSerialNo;
 	JsonFile = RootPath + SnName + ".json";
+	QString FirstCreateByte(R"({"DeviceId": ")"+ QString::number(DevicedID)+R"(",
+  "GetOnceImageTimes": "10000",
+  "Ip": ")"+ ip+R"(",
+  "Port": "24691",
+  "xImageSize": "3200",
+  "yImageSize": "1000",
+  "y_pitch_um": "20.0",
+  "OnceImageCounts":"2"})");
 	if (!QFile(JsonFile).exists())
-		createAndWritefile(JsonFile, FirstCreateByte);
-	QJsonObject paramObj = load_JsonFile(JsonFile);
+		createAndWritefile(JsonFile, FirstCreateByte.toUtf8());
+	QJsonObject paramObj = load_JsonObjectFile(JsonFile);
 	for (auto objStr : paramObj.keys())
 	{
 		ParasValueMap.insert(objStr, paramObj.value(objStr).toString());
@@ -474,8 +580,8 @@ bool Hd_CameraModule_3DKeyence3::init()
 		emit trigged(1);
 		//return false;
 	}
-
-	if (m_sdkFunc->use_external_batchStart > 0)
+	qDebug() << m_sdkFunc->use_external_batchStart;
+	if (m_sdkFunc->getTrigger())
 	{
 		type1 = 0;
 	}
@@ -498,7 +604,8 @@ bool Hd_CameraModule_3DKeyence3::setData(const std::vector<cv::Mat>& mats, const
 //获取数据
 bool Hd_CameraModule_3DKeyence3::data(std::vector<cv::Mat>& ImgS, QStringList& QStringListdata)
 {
-	m_sdkFunc->ImageMats.wait_for_pop(m_sdkFunc->timeout_ms, ImgS);
+	m_sdkFunc->ImageMats.try_pop(ImgS);
+	//ImgS = std::move(Imgout);
 	if (ImgS.empty())
 	{
 		ImgS.push_back(cv::Mat::zeros(100, 100, 0));
@@ -632,11 +739,11 @@ bool cameraFunSDKfactoryCls::run()
 
 		qDebug() << __FUNCTION__ << "  line:" << __LINE__ << " acquring image...! ";
 
-		emit trigged(501);
-		DWORD start = timeGetTime();
+		//emit trigged(501);
+		DWORD start = clock();
 		while (true)
 		{
-			DWORD ts = timeGetTime() - start;
+			DWORD ts = clock() - start;
 			if ((DWORD)timeout_ms < ts)
 			{
 				qCritical() << __FUNCTION__ << "  line:" << __LINE__ << "   timeout_ms " << ts;
@@ -709,7 +816,7 @@ bool cameraFunSDKfactoryCls::run()
 		if (allowflag.load(std::memory_order::memory_order_acquire))
 		{
 			vector<cv::Mat> Getimagevector;
-			Getimagevector.push_back(cv::Mat(yImageSize, xImageSize, CV_16U, luminanceImage));
+			Getimagevector.push_back(cv::Mat(yImageSize, xImageSize, CV_8UC1, luminanceImage));
 			Getimagevector.push_back(cv::Mat(yImageSize, xImageSize, CV_16U, heightImage));
 			ImageMats.push(Getimagevector);
 			qDebug() << __FUNCTION__ << " line:" << __LINE__ << " success to acquire 3d image! camera_name: " << deviceId;
@@ -731,29 +838,25 @@ bool cameraFunSDKfactoryCls::run()
 
 bool create(const QString& DeviceSn, const QString& name, const QString& path)
 {
-	int index = 0;
-	for (; index < MAX_LJXA_DEVICENUM; index++)
+	int indexSn = -1;
+	for (int i = 0; i < TotalSnIpVec.size(); i++)
 	{
-		CHAR* pControllerSerialNo = nullptr; CHAR* pHeadSerialNo = nullptr;
-		LJX8IF_GetSerialNumber(index, pControllerSerialNo, pHeadSerialNo);
-		if (pControllerSerialNo == nullptr || pHeadSerialNo == nullptr)
-		{
-			qWarning() << "NOT Found Device ID" << index << DeviceSn;
-		}
-		break;
-		if (pHeadSerialNo == DeviceSn)
-		{
-			OnePb temp;
-			temp.base = new Hd_CameraModule_3DKeyence3(index, path + "/Hd_CameraModule_3DKeyence3/");
-			if (!temp.base->init())
-				return false;
-			temp.baseWidget = new QWidget();
-			temp.DeviceSn = DeviceSn;
-			TotalMap.insert(name.split(':').first(), temp);
-			return  true;
-		}
+		if (TotalSnIpVec.at(i).first == DeviceSn)
+			indexSn = i;
 	}
-	return false;
+	if (indexSn == -1)
+	{
+		qCritical() << "NOT Found Device ID"  << DeviceSn;
+		return false;
+	}
+	OnePb temp;
+	temp.base = new Hd_CameraModule_3DKeyence3(indexSn, TotalSnIpVec.at(indexSn).second, path + "/Hd_CameraModule_3DKeyence3/");
+	if (!temp.base->init())
+		return false;
+	temp.baseWidget = new mPrivateWidget(temp.base);
+	temp.DeviceSn = DeviceSn;
+	TotalMap.insert(name.split(':').first(), temp);
+	return  true;	
 }
 
 void destroy(const QString& name)
@@ -784,13 +887,45 @@ PbGlobalObject* getCameraPtr(const QString& name)
 QStringList getCameraSnList()
 {
 	QStringList temp;
-	for (int i = 0; i < MAX_LJXA_DEVICENUM; i++)
+	QVector<QString > resVec;
+	QStringList list = getConnectedDevicesFromARP();
+	int index = 0;
+	TotalSnIpVec.clear();
+	for (auto str : list)
 	{
-		CHAR* pControllerSerialNo = nullptr; CHAR* pHeadSerialNo = nullptr;
-		LJX8IF_GetSerialNumber(i, pControllerSerialNo, pHeadSerialNo);
-		if (pControllerSerialNo == nullptr || pHeadSerialNo == nullptr)
-			break;
-		temp << pHeadSerialNo;
+		LJX8IF_ETHERNET_CONFIG EthernetConfig;
+		EthernetConfig.abyIpAddress[0] = str.split('.').at(0).toInt();
+		EthernetConfig.abyIpAddress[1] = str.split('.').at(1).toInt();
+		EthernetConfig.abyIpAddress[2] = str.split('.').at(2).toInt();
+		EthernetConfig.abyIpAddress[3] = str.split('.').at(3).toInt();
+		EthernetConfig.wPortNo = 24691;
+		int errCode = LJX8IF_EthernetOpen(index, &EthernetConfig);
+		if (errCode == 0)		
+		{
+			resVec.push_back(str);
+			if (resVec.size() >= MAX_LJXA_DEVICENUM) break;
+			index++;
+			qDebug() << __FUNCTION__ << " line:" << __LINE__ << "  Open device ! errCode:" << errCode;
+		}
+		
+		
+	}
+	for (int o = 0;  o < resVec.size();  o++)
+	{
+		//if (resVec.at(o) == 0)
+		{
+			char pControllerSerialNo[20]; char pHeadSerialNo [20];
+			LJX8IF_GetSerialNumber(o, pControllerSerialNo, pHeadSerialNo);
+			//qDebug() << sizeof(pControllerSerialNo);
+			//if (sizeof(pControllerSerialNo)!=20 || sizeof(pControllerSerialNo) != 20)
+				//continue;
+			qDebug() <<"Get Device"<<"index"<<o <<"\t" <<"pControllerSerialNo" << pControllerSerialNo <<"pHeadSerialNo" << pHeadSerialNo;
+			QPair<QString, QString> tempPair;
+			tempPair.first = pHeadSerialNo;
+			tempPair.second = resVec.at(o);
+			TotalSnIpVec.push_back(tempPair);
+			temp << pHeadSerialNo;
+		}
 	}
 
 	// 查询已经使用的
@@ -802,4 +937,33 @@ QStringList getCameraSnList()
 		}
 	}
 	return temp;
+}
+
+mPrivateWidget::mPrivateWidget(void* handle)
+{
+	m_Camerahandle = reinterpret_cast<Hd_CameraModule_3DKeyence3*>(handle);
+	InitWidget();
+}
+
+void mPrivateWidget::InitWidget()
+{
+	QVBoxLayout* MainLayout = new QVBoxLayout(this);
+
+	SetDataBtn = new QPushButton(this);
+	m_showimage = new ImageViewer(this);
+	MainLayout->addWidget(m_showimage);
+	MainLayout->addWidget(SetDataBtn);
+
+	connect(SetDataBtn, &QPushButton::clicked, this, [=]() {
+		std::vector<cv::Mat> mats;  QStringList list;
+		emit m_Camerahandle->trigged(1000);
+		m_Camerahandle->setData(mats, list);
+		m_Camerahandle->data(mats, list);
+		cv::Mat tempMat = mats.at(0);
+		m_showimage->loadImage(QPixmap::fromImage(cvMatToQImage(tempMat)));
+		});
+	/*connect(m_Camerahandle, &Hd_CameraModule_3DKeyence3::sendMats, this, [=](cv::Mat getMat) {
+
+		m_showimage->loadImage(QPixmap::fromImage(cvMatToQImage(getMat)));
+		});*/
 }

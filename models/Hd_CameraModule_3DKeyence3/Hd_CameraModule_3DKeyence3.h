@@ -1,10 +1,10 @@
 #ifndef Hd_CameraModule_3DKeyence_H
 #define Hd_CameraModule_3DKeyence_H
-
+#pragma once
 #include <QtCore/qglobal.h>
 #include <QByteArray>
 #include <QDebug>
-#include<iostream>
+#include <iostream>
 #include <Windows.h>
 #include "pbglobalobject.h"
 #include "QQueue.h"
@@ -18,9 +18,11 @@
 #include <qmutex.h>
 #include "LJX8_IF.h"
 #include "LJX8_ErrorCode.h"
-#include <ThreadSafeQueue.h>
+#include "ThreadSafeQueue.h"
+#include <struct.h>
+#include <imageView.h>
 const int MAX_LJXA_DEVICENUM = 6;
-#pragma comment(lib, "winmm.lib")
+//#pragma comment(lib, "winmm.lib")
 #pragma execution_character_set("utf-8")
 using namespace std;
 using namespace cv;
@@ -59,13 +61,15 @@ public:
     void LJXA_ACQ_CloseDevice(int lDeviceId);
     bool InitHighSpeed();
     void upDateParam();
+    bool run();
+    int getTrigger() { return use_external_batchStart; }
 public:
     QString RootPath;//家目录
     QObject* parent = nullptr;
     std::atomic_bool allowflag;
+
     ThreadSafeQueue<vector<cv::Mat>> ImageMats;//图像缓存队列
 
-    bool  run();
     QVector<CallbackFuncPack> CallbackFuncVec;
     LJX8IF_HIGH_SPEED_PRE_START_REQ* startReq_ptr = nullptr;
     LJX8IF_PROFILE_INFO* profileInfo_ptr = nullptr;
@@ -78,7 +82,7 @@ public:
     int yImageSize = 0;			 // Number of Y lines.
     float y_pitch_um = 0;		 // Data pitch of Y data. (e.g. your encoder setting)
     int	timeout_ms = 0;		 // Timeout value for the acquiring image (in milisecond).
-    int use_external_batchStart = 1; // Set "1" if you controll the batch start timing externally. (e.g. terminal input) 0内部触发，1外部触发
+    int use_external_batchStart = 0; // Set "1" if you controll the batch start timing externally. (e.g. terminal input) 0内部触发，1外部触发
     unsigned short zUnit = 0;
 
     unsigned short* heightImage = nullptr;		    // Height image
@@ -103,7 +107,7 @@ class  Hd_CameraModule_3DKeyence3 :public PbGlobalObject
 {
     Q_OBJECT
 public:
-    explicit Hd_CameraModule_3DKeyence3(int DevicedID, QString rootPath,int settype = -1, QObject* parent = nullptr);//对应哪个品牌相机(触发方式)/通信
+    explicit Hd_CameraModule_3DKeyence3(int index,QString ip, QString rootPath,int settype = -1, QObject* parent = nullptr);//对应哪个品牌相机(触发方式)/通信
     ~Hd_CameraModule_3DKeyence3();
     //#######################通用函数#######################
     //初始化参数；通信/相机的初始化参数
@@ -128,8 +132,10 @@ public:
     void cancelCallBackFun(PBGLOBAL_CALLBACK_FUN, QObject*, const QString&);
 
 private:
+    QString ip;
     QString JsonFile;
     QString RootPath;
+    QString HeanSn;
     int deviceId = 0;
     QString SnName;
     cameraFunSDKfactoryCls* m_sdkFunc = nullptr;
@@ -137,6 +143,18 @@ private:
     QMap<QString, QString> ParasValueMap;
 };
 
+class mPrivateWidget :public QWidget
+{
+    Q_OBJECT;
+public:
+    mPrivateWidget(void*);
+    ~mPrivateWidget() {};
+    void InitWidget();
+    QPushButton* SetDataBtn;
+    ImageViewer* m_showimage;
+    Hd_CameraModule_3DKeyence3* m_Camerahandle = nullptr;
+
+};
 extern "C"
 {
     Q_DECL_EXPORT bool create(const QString& DeviceSn, const QString& name, const QString& path);

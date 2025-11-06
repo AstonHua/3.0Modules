@@ -3,7 +3,7 @@ get_filename_component(CURRENT_FOLDER ${CMAKE_CURRENT_SOURCE_DIR} NAME)
 string(TIMESTAMP RUN_TIME)
 message( " model start : " ${CURRENT_FOLDER}:${RUN_TIME})
 
-set(DLL_NAMES "keyence3D" "opencv")
+set(DLL_NAMES "dahua" "opencv")
 foreach(child ${DLL_NAMES})         
     LIST(APPEND ENV_INCLUDE ${${child}_include})
     LIST(APPEND ENV_LIB ${${child}_lib})

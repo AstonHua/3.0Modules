@@ -124,7 +124,7 @@ int SearchDevice()
 
 bool connctDevice(string GetSnName, void* handle, void* pUser)
 {
-	cameraFunSDKfactoryCls* CurrentCamera = reinterpret_cast<cameraFunSDKfactoryCls*>(pUser);
+	CameraFunSDKfactoryCls* CurrentCamera = reinterpret_cast<CameraFunSDKfactoryCls*>(pUser);
 	if (!SearchDevice())
 		return false;
 	int index = 0;
@@ -177,7 +177,7 @@ bool connctDevice(string GetSnName, void* handle, void* pUser)
 
 void __stdcall ReconnectDevice(unsigned int nMsgType, void* pUser)
 {
-	cameraFunSDKfactoryCls* CurrentCamera = reinterpret_cast<cameraFunSDKfactoryCls*>(pUser);
+	CameraFunSDKfactoryCls* CurrentCamera = reinterpret_cast<CameraFunSDKfactoryCls*>(pUser);
 	qDebug() << "[Error] " << " MV camera disconnects!";
 	emit CurrentCamera->trigged(1);
 	if (nMsgType == MV_EXCEPTION_DEV_DISCONNECT)
@@ -206,7 +206,7 @@ void __stdcall ImageCallBackEx(unsigned char* pData0, MV_FRAME_OUT_INFO_EX* pFra
 	double time_Start = (double)clock();
 	int frameNum = 0;
 	cv::Mat srcImage = cv::Mat();
-	cameraFunSDKfactoryCls* CurrentCamera = reinterpret_cast<cameraFunSDKfactoryCls*>(pUser0);
+	CameraFunSDKfactoryCls* CurrentCamera = reinterpret_cast<CameraFunSDKfactoryCls*>(pUser0);
 	if (pFrameInfo0)
 	{
 		//获取的是单通道灰度图
@@ -284,19 +284,19 @@ void __stdcall ImageCallBackEx(unsigned char* pData0, MV_FRAME_OUT_INFO_EX* pFra
 
 	qDebug() << "[INFO] " << " line:" << __LINE__ << " checkImg getImg,Time:" << (time_End - time_Start) << "ms"
 		<< "--CameraName:" << QString::fromLocal8Bit(CurrentCamera->Username.c_str()) << " timepoint " << curT.toString("hh:mm:ss.zzz")\
-		<< " imgIndex:" << CurrentCamera->Currentindex++ << "nFrameNum : " << frameNum;
+		<< " imgIndex:" << CurrentCamera->Currentindex++ << "nFrameNum : " << pFrameInfo0->nFrameNum;
 	/*QString savePath = "../runtime/Bin_DEVICE/testImg/camera_" + QString::number(imgIndex + 1)+".png";
 	cv::Mat resizeS;
 	cv::resize(srcImage, resizeS, cv::Size(), 0.1, 0.1);
 	cv::imwrite(savePath.toStdString(), resizeS);*/
 }
 
-cameraFunSDKfactoryCls::~cameraFunSDKfactoryCls()
+CameraFunSDKfactoryCls::~CameraFunSDKfactoryCls()
 {
 	CloseDevice(handle);
 }
 
-bool cameraFunSDKfactoryCls::initSdk(QMap<QString, QString>& insideValuesMaps)
+bool CameraFunSDKfactoryCls::initSdk(QMap<QString, QString>& insideValuesMaps)
 {
 	if (!connctDevice(SnCode, getHandle(), this))
 	{
@@ -314,7 +314,7 @@ bool cameraFunSDKfactoryCls::initSdk(QMap<QString, QString>& insideValuesMaps)
 
 }
 
-void cameraFunSDKfactoryCls::upDateParam()
+void CameraFunSDKfactoryCls::upDateParam()
 {
 	return;
 }
@@ -331,8 +331,8 @@ Hd_CameraModule_HIK3::Hd_CameraModule_HIK3(QString sn,QString path, int settype,
 	{
 		ParasValueMap.insert(objStr, paramObj.value(objStr).toString());
 	}
-	m_sdkFunc = new  cameraFunSDKfactoryCls(Sncode, RootPath);
-	connect(m_sdkFunc, &cameraFunSDKfactoryCls::trigged, this, [=](int value) {emit trigged(value); });
+	m_sdkFunc = new  CameraFunSDKfactoryCls(Sncode, RootPath);
+	connect(m_sdkFunc, &CameraFunSDKfactoryCls::trigged, this, [=](int value) {emit trigged(value); });
 }
 
 Hd_CameraModule_HIK3::~Hd_CameraModule_HIK3()
@@ -559,20 +559,6 @@ bool IsColor(MvGvspPixelType enType)
 	default:
 		return false;
 	}
-}
-
-QImage cvMatToQImage(const cv::Mat& src)
-{
-
-	if (src.channels() == 1) { // if grayscale image
-		return QImage((uchar*)src.data, src.cols, src.rows, static_cast<int>(src.step), QImage::Format_Grayscale8).copy();
-	}
-	if (src.channels() == 3) { // if 3 channel color image
-		cv::Mat rgbMat;
-		cv::cvtColor(src, rgbMat, cv::COLOR_BGR2RGB); // invert BGR to RGB
-		return QImage((uchar*)rgbMat.data, src.cols, src.rows, static_cast<int>(src.step), QImage::Format_RGB888).copy();
-	}
-	return QImage();
 }
 
 mPrivateWidget::mPrivateWidget(void* handle)

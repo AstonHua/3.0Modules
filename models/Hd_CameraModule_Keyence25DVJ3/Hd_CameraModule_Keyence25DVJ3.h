@@ -22,8 +22,7 @@
 #include <ThreadSafeQueue.h>
 #include <QWidget>
 #include <imageView.h>
-#include <QGraphicsPixmapItem>
-#include <QPushButton>
+#include <struct.h>
 using namespace Keyence;
 
 using namespace cv;
@@ -160,71 +159,6 @@ extern "C"
 //Q_DECL_EXPORT Hd_25DCameraVJ_module * create(int type = -1);
 //Q_DECL_EXPORT void destory(Hd_25DCameraVJ_module * ptr);
 }
-class ImageViewer : public QGraphicsView {
-public:
-    ImageViewer(QWidget* parent = nullptr) : QGraphicsView(parent), scaleFactor(1.0) {
-        setDragMode(QGraphicsView::ScrollHandDrag);
-        setRenderHint(QPainter::Antialiasing, true);
-        setRenderHint(QPainter::SmoothPixmapTransform, true);
-        temp = new QGraphicsPixmapItem();
-        scene.addItem(temp);
-        setScene(&scene);
-        setSceneRect(0,0,5000,5000);
-        resetTransform();
-        
-        
-    }
-
-    void loadImage(const QString& imagePath) {
-        QPixmap pixmap(imagePath);
-        if (!pixmap.isNull()) {
-            temp->setPixmap(pixmap);
-            this->fitInView(scene.itemsBoundingRect(), Qt::KeepAspectRatio);
-            scaleFactor = 1.0;
-            scene.update();
-            temp->update();
-        }
-    } void loadImage(const QPixmap& pixmap) {
-        // QPixmap pixmap(imagePath);
-        if (!pixmap.isNull()) {
-            //scene.clear();
-            qDebug() << pixmap.size();
-            temp->setPixmap(pixmap);
-            
-            this->fitInView(scene.itemsBoundingRect(), Qt::KeepAspectRatio);
-            scaleFactor = 1.0;
-            scene.update();
-            temp->update();
-        }
-    }
-    void Clear() { scene.clear(); }
-    void GetImage(QImage& image)
-    {
-        for (QGraphicsItem* item : scene.items()) {
-            if (auto pixItem = qgraphicsitem_cast<QGraphicsPixmapItem*>(item)) {
-                image = pixItem->pixmap().toImage();
-                break;
-            }
-        }
-    }
-    void GetPoingToScale(QPointF, float);
-protected:
-    void wheelEvent(QWheelEvent* event) override {
-        const double scaleFactorIncrement = 1.15;
-        if (event->angleDelta().y() > 0) {
-            scale(scaleFactorIncrement, scaleFactorIncrement);
-            scaleFactor *= scaleFactorIncrement;
-        }
-        else {
-            scale(1.0 / scaleFactorIncrement, 1.0 / scaleFactorIncrement);
-            scaleFactor /= scaleFactorIncrement;
-        }
-    }
-private:
-    QGraphicsPixmapItem* temp = nullptr;
-    QGraphicsScene scene;
-    double scaleFactor;
-};
 void GetCallbackMat(QObject*, const std::vector<cv::Mat>&);
 class mPrivateWidget :public QWidget
 {
