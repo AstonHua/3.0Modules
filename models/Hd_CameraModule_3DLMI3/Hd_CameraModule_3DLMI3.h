@@ -1,22 +1,14 @@
 ﻿#ifndef HD_3DCAMERALMI_MODULE_H
 #define HD_3DCAMERALMI_MODULE_H
 #include <QtCore/qglobal.h>
-#include <QThread>
-#include <QQueue>
-#include <QMutex>
 #include <GoSdk.h>
-#include <QByteArray>
 #include <windows.h>
 #include "pbglobalobject.h"
 #include "QQueue.h"
 #include "QMap.h"
-#include "QDir.h"
-#include "qjsonobject.h"
-#include "qjsonarray.h"
-#include "qjsondocument.h"
 #include "QLibrary.h"
-#include <QWidget>
 #include <ThreadSafeQueue.h>
+#include <struct.h>
 #pragma comment(lib, "winmm.lib")
 #pragma comment(lib,"GoSdk.lib")
 #pragma comment(lib,"kApi.lib")

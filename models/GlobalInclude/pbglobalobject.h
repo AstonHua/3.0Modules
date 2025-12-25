@@ -1,4 +1,4 @@
-#ifndef PBGLOBALOBJECT_H
+﻿#ifndef PBGLOBALOBJECT_H
 #define PBGLOBALOBJECT_H
 
 #include <QObject>

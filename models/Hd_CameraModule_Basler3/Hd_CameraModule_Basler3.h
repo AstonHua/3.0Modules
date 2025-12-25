@@ -11,10 +11,9 @@
 //#include <pylon/InstantCamera.h>
 //#include <pylon/InstantInterface.h>
 //#include <pylon/gige/BaslerGigECamera.h>
-#include <opencv2/opencv.hpp>
 
 #include "pbglobalobject.h"
-
+#include <struct.h>
 using namespace cv;
 using namespace std;
 using namespace Pylon;

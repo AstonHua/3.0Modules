@@ -8,9 +8,7 @@
 #include <QtCore/qglobal.h>
 #include <Windows.h>
 #include <time.h>
-#include <QVector>
-#include <QMap>
-#include <QMutex>
+
 #include "KglDevice.h"
 #include "KglStream.h"
 #include "KglSystem.h"
@@ -20,8 +18,6 @@
 #include "KglDeviceEventSink.h"
 #include <pbglobalobject.h>
 #include <ThreadSafeQueue.h>
-#include <QWidget>
-#include <imageView.h>
 #include <struct.h>
 using namespace Keyence;
 
@@ -156,8 +152,6 @@ extern "C"
     Q_DECL_EXPORT QWidget* getCameraWidgetPtr(const QString& name);
     Q_DECL_EXPORT PbGlobalObject* getCameraPtr(const QString& name);
     Q_DECL_EXPORT QStringList getCameraSnList();
-//Q_DECL_EXPORT Hd_25DCameraVJ_module * create(int type = -1);
-//Q_DECL_EXPORT void destory(Hd_25DCameraVJ_module * ptr);
 }
 void GetCallbackMat(QObject*, const std::vector<cv::Mat>&);
 class mPrivateWidget :public QWidget
