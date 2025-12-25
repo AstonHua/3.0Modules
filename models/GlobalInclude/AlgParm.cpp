@@ -208,17 +208,6 @@ TextEditSelf::TextEditSelf()
 			cursor.setCharFormat(format);
 			textEdit->setTextCursor(cursor);
 
-
-
-			//QString beforeText = beforeLine->text();
-			//textEdit->setFocus();
-			////highlightText(beforeText);
-			//QTextCursor cursor = textEdit->textCursor();
-			//// 将光标移动到文本的开始
-			////cursor.movePosition(QTextCursor::Start);
-			//cursor.setPosition(text.indexOf(beforeLine->text()));
-			//// 将更改应用到QTextEdit
-			//textEdit->setTextCursor(cursor);
 			return;
 		}
 		if (text.contains(beforeLine->text()))
