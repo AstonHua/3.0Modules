@@ -34,6 +34,7 @@
 #include "pbglobalobject.h"
 #include <ThreadSafeQueue.h>
 #include <struct.h>
+#include <AlgParm.h>
 using namespace cv;
 using namespace std;
 #pragma execution_character_set("utf-8")
@@ -54,15 +55,17 @@ public:
 	void* getHandle() { return handle; }
 	void upDateParam();
     void* handle = nullptr;//相机句柄
-    ThreadSafeQueue<cv::Mat> MatQueue;
-    QVector<CallbackFuncPack> CallbackFuncVec;
+    ThreadSafeQueue<std::vector<cv::Mat>> MatQueue;
+    QMap<int,CallbackFuncPack> CallbackFuncMap;
     std::atomic_bool allowflag;
     int Currentindex = 0;
     string Username;
     string SnCode;
 	QString RootPath;
 	QMap<QString, QString> ParasValueMap;
-
+    int getImageMaxCoiunts = 1;//一次信号取图次数
+    int OnceGetImageNum = 1;//一次取图出图数量
+    int timeOut = 1000;
     MV_CAM_TRIGGER_SOURCE m_MV_CAM_TRIGGER_SOURCE;//触发方式
 signals:
 	void trigged(int);
@@ -88,7 +91,8 @@ public:
     //注销回调 string对应自身的参数协议 （自定义）--->注销后还得取消连接状态
     void cancelCallBackFun(PBGLOBAL_CALLBACK_FUN, QObject*, const QString&);
 
-    QJsonObject load_camera_Example();
+    QString GetRootPath() const { return RootPath; }
+    QString GetSn() const { return Sncode; }
     QString Sncode;
 	QString RootPath;
 	QString JsonFilePath;
@@ -115,11 +119,15 @@ class mPrivateWidget :public QWidget
 {
 	Q_OBJECT;
 public:
-	mPrivateWidget(void*);
-	~mPrivateWidget() {};
-	void InitWidget();
-	QPushButton* SetDataBtn;
-	ImageViewer* m_showimage;
+    mPrivateWidget(void*);
+    ~mPrivateWidget() {};
+    void InitWidget();
+    QPushButton* SetDataBtn;
+    QPushButton* OpenGrapMat;
+    QPushButton* NotGrapMat;
+    ImageViewer* m_showimage;
+    //MyTableWidget* m_paramsTable;
+    AlgParmWidget* m_AlgParmWidget;
 	Hd_CameraModule_HIK3* m_Camerahandle = nullptr;
 
 };

@@ -779,15 +779,15 @@ cv::Mat cameraFunSDKfactoryCls::RetrieveBuffer(std::string imagetype)
 	clock_t endc = clock();
 	if ((KGL_SUCCESS != result) || (KGL_SUCCESS != operationResult))
 	{
-		//qDebug() << "[retrieveBuffer] " << "result:" << result;
-		//qDebug() << "[retrieveBuffer] " << "operationResult:" << operationResult;
+		qCritical() << "[retrieveBuffer] " << "result:" << result;
+		qCritical() << "[retrieveBuffer] " << "operationResult:" << operationResult;
 		if (kglBuffer != NULL)
 		{
 			kglBuffer->free();//设置成只执行一次
 			delete(kglBuffer);
 			kglBuffer = NULL;
 		}
-		//qDebug() << ("Error : retrieveBuffer\n");
+		qCritical() << ("Error : retrieveBuffer\n");
 		return Mat();
 	}
 	//qDebug() << "kglStream->retrieveBuffer time " << endc - startc;

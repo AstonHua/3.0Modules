@@ -104,6 +104,7 @@ public:
     k32u k32u_id = 117599; //3D 序列号
     QMap<QString, QString> ParasValueMap;
     ushort Currentindex = 0;
+    kAssembly api = kNULL;
     GoSystem system1 = kNULL;
     GoSensor sensor = kNULL;
     GoDataSet dataset = kNULL;

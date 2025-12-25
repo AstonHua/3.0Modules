@@ -215,7 +215,7 @@ endif()
 ##################
 # Automated modules
 if(BUILD_MODULES)
-   add_subdirectory(models)
+  add_subdirectory(models)
 endif()
 
 # 包含子项目。
@@ -223,8 +223,8 @@ endif()
 # Automated examples
 ##
 if(BUILD_EXAMPLES)
-  #add_subdirectory(CppCode)
-  add_subdirectory(test)
+ #add_subdirectory(CppCode)
+ add_subdirectory(test)
 endif()
 #install(FILES python_code/script.py DESTINATION ${CMAKE_INSTALL_PREFIX}/python_code)
 #add_subdirectory(pycode)

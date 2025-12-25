@@ -48,7 +48,7 @@ int main(int argc, char* argv[])
 	//QCoreApplication::addLibraryPath("./");
 	//loadDLLWithWindowsAPI();
 	//QTextCodec::setCodecForLocale(QTextCodec::codecForName("UTF-8"));
-	QLibrary* m_lib = new QLibrary("./Hd_CameraModule_DaHua3.dll");
+	QLibrary* m_lib = new QLibrary("./Hd_CameraModule_HIK3.dll");
 	bool flag = m_lib->load();
 	if (!m_lib->isLoaded())
 	{

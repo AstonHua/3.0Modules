@@ -42,17 +42,21 @@ QStringList getConnectedDevicesFromARP() {
 	process.waitForFinished();
 	QString output = byteArrayToUnicode(process.readAllStandardOutput());
 	//QString output = QString::fromLocal8Bit(process.readAllStandardOutput());
-	qDebug() << output;
-	// 解析ARP表输出，格式如: 192.168.1.2    00-11-22-33-44-55    动态
-	QRegularExpression regex(R"((\d+\.\d+\.\d+\.\d+)\s+([0-9a-fA-F-]+)\s+(动态|静态))");
-	QRegularExpressionMatchIterator matches = regex.globalMatch(output);
 
+	// 解析ARP表输出，格式如: 192.168.1.2    00-11-22-33-44-55    动态
+	QRegularExpression regex(QString(R"((\d+\.\d+\.\d+\.\d+)\s+([0-9a-fA-F-]+))").toLocal8Bit());
+	QRegularExpressionMatchIterator matches = regex.globalMatch(output);
 	while (matches.hasNext()) {
 		QRegularExpressionMatch match = matches.next();
 		QString ip = match.captured(1);
+		//qDebug() << ip;
 		// 排除本机IP和广播地址
-		if (!ip.endsWith(".255") && !ip.endsWith(".0")) {
+		if (!ip.endsWith(".255") && !ip.endsWith(".0") 
+			 && ip.split('.').at(0) == "192"
+			&& ip.split('.').at(1) == "168")//基恩士默认第三位是0配置ip时设置静态ip第三位为0
+		{
 			devices << ip;
+
 		}
 	}
 
@@ -73,7 +77,7 @@ QStringList getConnectedDevicesFromARP() {
 		devices << ip;
 	}
 #endif
-
+	qDebug() << devices;
 	return devices;
 }
 
@@ -227,15 +231,18 @@ struct OnePb
 	QString index;
 };
 QMap<QString, OnePb>  TotalMap;
-QVector<QPair<QString,QString>>TotalSnIpVec;
+QVector<QPair<QString, QString>>TotalSnIpVec;
 
 
 const int MAX_LJXA_XDATANUM = 3200;
 const unsigned int BUFFER_FULL_COUNT = 30000;
 
 int _imageAvailable[MAX_LJXA_DEVICENUM] = { 0 };
-unsigned short* _luminanceBuf[MAX_LJXA_DEVICENUM] = { 0 };
-unsigned short* _heightBuf[MAX_LJXA_DEVICENUM] = { 0 };
+//unsigned short* _luminanceBuf[MAX_LJXA_DEVICENUM] = { 0 };
+//unsigned short* _heightBuf[MAX_LJXA_DEVICENUM] = { 0 };
+LJX8IF_HIGH_SPEED_PRE_START_REQ* startReq_ptr[MAX_LJXA_DEVICENUM];// = nullptr;
+LJX8IF_PROFILE_INFO* profileInfo_ptr[MAX_LJXA_DEVICENUM];// = nullptr;
+CameraFunSDKfactoryCls* SDKFunc[MAX_LJXA_DEVICENUM];
 int _lastImageSizeHeight[MAX_LJXA_DEVICENUM];
 int _highSpeedPortNo[MAX_LJXA_DEVICENUM];
 LJX8IF_ETHERNET_CONFIG _ethernetConfig[MAX_LJXA_DEVICENUM];
@@ -247,37 +254,30 @@ void Hd_CameraModule_3DKeyence3::registerCallBackFun(PBGLOBAL_CALLBACK_FUN callB
 	TempPack.callbackparent = parent;
 	TempPack.cameraIndex = getString;
 	TempPack.GetimagescallbackFunc = callBackFun;
-	m_sdkFunc->CallbackFuncVec.append(TempPack);
-	qDebug() << getString;
+	m_sdkFunc->CallbackFuncMap.insert(getString.toInt(), TempPack);
+	qDebug() << "registerCallBackFun" << getString;
 }
 void Hd_CameraModule_3DKeyence3::cancelCallBackFun(PBGLOBAL_CALLBACK_FUN callBackFun, QObject* parent, const QString& getString)
 {
 	int index = getString.toInt();
-	if (callBackFun == m_sdkFunc->CallbackFuncVec.at(index).GetimagescallbackFunc)
+	if (m_sdkFunc->CallbackFuncMap.keys().contains(index))
 	{
-		qDebug() << index;
-		m_sdkFunc->CallbackFuncVec.removeAt(index);
-	}
-	else
-	{
-		int size = m_sdkFunc->CallbackFuncVec.size();
-		for (int i = 0; i < size; i++)
+		if (callBackFun == m_sdkFunc->CallbackFuncMap.value(index).GetimagescallbackFunc)
+			m_sdkFunc->CallbackFuncMap.remove(index);
+		else
 		{
-			if (m_sdkFunc->CallbackFuncVec.at(i).GetimagescallbackFunc == callBackFun)
-			{
-				m_sdkFunc->CallbackFuncVec.removeAt(i);
-				qDebug() << i;
-				return;
-			}
+			qCritical() << "key of Values != Input Callbackfun" << getString;
 		}
+		qDebug() << "cancelCallBackFun" << getString;
+
 	}
 	return;
 }
-cameraFunSDKfactoryCls::cameraFunSDKfactoryCls(int id, QString RootPath, QObject* praent) 
+CameraFunSDKfactoryCls::CameraFunSDKfactoryCls(int id, QString RootPath, QObject* praent)
 	:deviceId(id), parent(praent), RootPath(RootPath)
 {
 }
-cameraFunSDKfactoryCls::~cameraFunSDKfactoryCls()
+CameraFunSDKfactoryCls::~CameraFunSDKfactoryCls()
 {
 	Sleep(10);
 	if (isopen)
@@ -290,38 +290,21 @@ cameraFunSDKfactoryCls::~cameraFunSDKfactoryCls()
 
 		LJXA_ACQ_CloseDevice(deviceId);
 		qDebug() << __FUNCTION__ << "line:" << __LINE__ << " CloseDevice success!";
-		if (heightImage)
-		{
-			free(heightImage);
-
-		}
-		if (luminanceImage)
-		{
-			free(luminanceImage);
-		}
 	}
 
 	// Free memory
-	if (_heightBuf[deviceId] != NULL)
+
+
+	if (startReq_ptr[deviceId])
 	{
-		free(_heightBuf[deviceId]);
+		delete startReq_ptr[deviceId];
+		startReq_ptr[deviceId] = nullptr;
 	}
 
-	if (_luminanceBuf[deviceId] != NULL)
+	if (profileInfo_ptr[deviceId])
 	{
-		free(_luminanceBuf[deviceId]);
-	}
-
-	if (startReq_ptr)
-	{
-		delete startReq_ptr;
-		startReq_ptr = nullptr;
-	}
-
-	if (profileInfo_ptr)
-	{
-		delete profileInfo_ptr;
-		profileInfo_ptr = nullptr;
+		delete profileInfo_ptr[deviceId];
+		profileInfo_ptr[deviceId] = nullptr;
 	}
 
 	if (setParam_Ptr)
@@ -337,10 +320,10 @@ cameraFunSDKfactoryCls::~cameraFunSDKfactoryCls()
 	}
 }
 
-bool cameraFunSDKfactoryCls::initSdk(QMap<QString, QString>& insideValuesMaps)
+bool CameraFunSDKfactoryCls::initSdk(QMap<QString, QString>& insideValuesMaps)
 {
 
-	timeout_ms = insideValuesMaps.value("GetOnceImageTimes").toInt();
+	/*timeout_ms = insideValuesMaps.value("GetOnceImageTimes").toInt();
 	QStringList IpList = insideValuesMaps.value("Ip").split('.');
 	if (IpList.size() != 4)
 		return false;
@@ -353,11 +336,13 @@ bool cameraFunSDKfactoryCls::initSdk(QMap<QString, QString>& insideValuesMaps)
 	yImageSize = insideValuesMaps.value("yImageSize").toInt();
 	y_pitch_um = insideValuesMaps.value("y_pitch_um").toFloat();
 	deviceId = insideValuesMaps.value("DeviceId").toInt();
+	use_external_batchStart = insideValuesMaps.value("use_external_batchStart").toInt();
+	getImageMaxCoiunts = insideValuesMaps.value("OnceSignalsGetImageCounts").toInt();
+	OnceGetImageNum = insideValuesMaps.value("OnceImageCounts").toInt();*/
 
-
-	startReq_ptr = new LJX8IF_HIGH_SPEED_PRE_START_REQ;
-	profileInfo_ptr = new LJX8IF_PROFILE_INFO;
-	startReq_ptr->bySendPosition = 2;
+	startReq_ptr[deviceId] = new LJX8IF_HIGH_SPEED_PRE_START_REQ;
+	profileInfo_ptr[deviceId] = new LJX8IF_PROFILE_INFO;
+	startReq_ptr[deviceId]->bySendPosition = 2;
 
 	setParam_Ptr = new LJXA_ACQ_SETPARAM;
 	getParam_Ptr = new LJXA_ACQ_GETPARAM;
@@ -368,23 +353,14 @@ bool cameraFunSDKfactoryCls::initSdk(QMap<QString, QString>& insideValuesMaps)
 	setParam_Ptr->use_external_batchStart = use_external_batchStart;
 
 	// Allocate user memory
-	heightImage = (unsigned short*)malloc(sizeof(unsigned short) * xImageSize * yImageSize);
-	luminanceImage = (unsigned short*)malloc(sizeof(unsigned short) * xImageSize * yImageSize);
+	//heightImage = (unsigned short*)malloc(sizeof(unsigned short) * xImageSize * yImageSize);
+	//luminanceImage = (unsigned short*)malloc(sizeof(unsigned short) * xImageSize * yImageSize);
 
 	errCode = LJXA_ACQ_OpenDevice(deviceId, &EthernetConfig, HighSpeedPortNo);
 	if (errCode != LJX8IF_RC_OK)
 	{
 		qDebug() << __FUNCTION__ << " line:" << __LINE__ << " Failed to open device ";
-		//Free user memory
-		if (heightImage)
-		{
-			free(heightImage);
-		}
-
-		if (luminanceImage)
-		{
-			free(luminanceImage);
-		}
+		//Free user memory		
 		return false;
 	}
 	//char pControllerSerialNo [20] ; char pHeadSerialNo[20];
@@ -393,7 +369,7 @@ bool cameraFunSDKfactoryCls::initSdk(QMap<QString, QString>& insideValuesMaps)
 	isopen = true;
 
 	// Allocate memory
-	_heightBuf[deviceId] = (unsigned short*)malloc(yImageSize * MAX_LJXA_XDATANUM * 2);
+	/*_heightBuf[deviceId] = (unsigned short*)malloc(yImageSize * MAX_LJXA_XDATANUM * 2);
 	if (_heightBuf[deviceId] == NULL)
 	{
 		return LJX8IF_RC_ERR_NOMEMORY;
@@ -403,7 +379,7 @@ bool cameraFunSDKfactoryCls::initSdk(QMap<QString, QString>& insideValuesMaps)
 	if (_luminanceBuf[deviceId] == NULL)
 	{
 		return LJX8IF_RC_ERR_NOMEMORY;
-	}
+	}*/
 
 	// Initialize
 	if (!InitHighSpeed())
@@ -428,9 +404,10 @@ void myCallbackFunc(LJX8IF_PROFILE_HEADER* pProfileHeaderArray, WORD* pHeightPro
 		if (_imageAvailable[dwUser] == 1) return;
 		// _heightBuf 代表的含义:程序里的高度缓存区，pHeightProfileArray 回调函数里的数据 
 		// 此处崩溃的可能性：xImageSize 配置文件中设置的值和3D相机调试软件设置的值不一致，会崩溃。
-		if (_heightBuf[dwUser] == NULL)
+		unsigned short* heightBuf = (unsigned short*)malloc(dwProfileDataCount * dwCount * 2);
+		if (heightBuf == NULL)
 		{
-			qDebug() << __FUNCTION__ << " line:" << __LINE__ << "_heightBuf[dwUser] == NULL";
+			qDebug() << __FUNCTION__ << " line:" << __LINE__ << "heightBuf == NULL";
 			return;
 		}
 		if (pHeightProfileArray == NULL)
@@ -439,45 +416,135 @@ void myCallbackFunc(LJX8IF_PROFILE_HEADER* pProfileHeaderArray, WORD* pHeightPro
 			return;
 		}
 
-		qDebug() << __FUNCTION__ << " line:" << __LINE__ << "_heightBuf[dwUser]: " << _heightBuf[dwUser];
-		qDebug() << __FUNCTION__ << " line:" << __LINE__ << "pHeightProfileArray: " << pHeightProfileArray;
+		//qDebug() << __FUNCTION__ << " line:" << __LINE__ << "heightBuf " << heightBuf;
+		//qDebug() << __FUNCTION__ << " line:" << __LINE__ << "pHeightProfileArray: " << pHeightProfileArray;
 
 		//判断内存是否重叠
-		if (_heightBuf[dwUser] <= pHeightProfileArray || (unsigned short*)_heightBuf[dwUser] >= (WORD*)pHeightProfileArray + dwProfileDataCount * dwCount * 2)
+		if (heightBuf <= pHeightProfileArray || (unsigned short*)heightBuf >= (WORD*)pHeightProfileArray + dwProfileDataCount * dwCount * 2)
 		{
-			memcpy(&_heightBuf[dwUser][0], pHeightProfileArray, dwProfileDataCount * dwCount * 2);
+			memcpy(heightBuf, pHeightProfileArray, dwProfileDataCount * dwCount * 2);
 		}
 		else
 		{
 			qDebug() << __FUNCTION__ << " line:" << __LINE__ << "first memcpy _heightBuf error";
-			if (_heightBuf[dwUser] != NULL)
+			if (heightBuf != NULL)
 			{
-				free(_heightBuf[dwUser]);
-				_heightBuf[dwUser] = NULL;
+				free(heightBuf);
+				heightBuf = NULL;
 			}
 			qDebug() << __FUNCTION__ << " line:" << __LINE__ << "  memcpy _heightBuf again ";
-			_heightBuf[dwUser] = (unsigned short*)malloc(dwCount * MAX_LJXA_XDATANUM * 2);
-			memcpy(&_heightBuf[dwUser][0], pHeightProfileArray, dwProfileDataCount * dwCount * 2);
+			heightBuf = (unsigned short*)malloc(dwCount * MAX_LJXA_XDATANUM * 2);
+			memcpy(heightBuf, pHeightProfileArray, dwProfileDataCount * dwCount * 2);
 			qDebug() << __FUNCTION__ << " line:" << __LINE__ << " Second memcpy _heightBuf success ";
 
 		}
-
-		qDebug() << __FUNCTION__ << " line:" << __LINE__ << "_luminanceBuf[dwUser]: " << _luminanceBuf[dwUser];
-		qDebug() << __FUNCTION__ << " line:" << __LINE__ << "pLuminanceProfileArray: " << pLuminanceProfileArray;
+		unsigned short* luminanceBuf = (unsigned short*)malloc(dwProfileDataCount * dwCount * 2);
+		//qDebug() << __FUNCTION__ << " line:" << __LINE__ << "_luminanceBuf[dwUser]: " << luminanceBuf;
+		//qDebug() << __FUNCTION__ << " line:" << __LINE__ << "pLuminanceProfileArray: " << pLuminanceProfileArray;
 		if (dwLuminanceEnable == 1)
 		{
-			if (_luminanceBuf[dwUser] == NULL)
+			if (luminanceBuf == NULL)
 			{
 				qDebug() << __FUNCTION__ << " line:" << __LINE__ << "_luminanceBuf[dwUser]== NULL";
 				return;
 			}
-			if (_luminanceBuf[dwUser] <= pLuminanceProfileArray || (unsigned short*)_luminanceBuf[dwUser] >= (WORD*)pLuminanceProfileArray + dwProfileDataCount * dwCount * 2)
-				memcpy(&_luminanceBuf[dwUser][0], pLuminanceProfileArray, dwProfileDataCount * dwCount * 2);
+			if (luminanceBuf <= pLuminanceProfileArray || (unsigned short*)luminanceBuf >= (WORD*)pLuminanceProfileArray + dwProfileDataCount * dwCount * 2)
+				memcpy(luminanceBuf, pLuminanceProfileArray, dwProfileDataCount * dwCount * 2);
 			else
 				qDebug() << __FUNCTION__ << " line:" << __LINE__ << "memcpy _luminanceBuf error";
 		}
-		_imageAvailable[dwUser] = 1;                 // 图像获取成功  dwUser  和 deviceId   一致
-		_lastImageSizeHeight[dwUser] = dwCount;      // 扫描的行数，  dwCount 和 yImageSize 一致
+		// 扫描的行数，  dwCount 和 yImageSize 一致
+		CameraFunSDKfactoryCls* tempsdk = SDKFunc[dwUser];
+		//if (tempsdk->allowflag.load(std::memory_order::memory_order_acquire))
+		{
+			int xDatasize = profileInfo_ptr[dwUser]->wProfileDataCount;
+
+			cv::Mat luminanceMat = cv::Mat(tempsdk->yImageSize, xDatasize, CV_16UC1, luminanceBuf);
+			cv::normalize(luminanceMat, luminanceMat, 0, 255, cv::NORM_MINMAX);
+			cv::convertScaleAbs(luminanceMat, luminanceMat);
+			cv::Mat heightMat = cv::Mat(tempsdk->yImageSize, xDatasize, CV_16UC1, heightBuf);
+			if (tempsdk->use_external_batchStart > 0)
+			{
+				vector<cv::Mat> Getimagevector;
+				int realIndex = tempsdk->Currentindex * tempsdk->OnceGetImageNum;
+				qDebug() << "callback index" << realIndex;
+				Getimagevector.push_back(luminanceMat.clone());
+				if (tempsdk->CallbackFuncMap.keys().contains(realIndex))
+				{
+					qDebug() << "Mat Type" << "luminanceMat" << "out Mat callback" << tempsdk->CallbackFuncMap.keys() << realIndex << tempsdk->getImageMaxCoiunts;
+					QObject* obj = tempsdk->CallbackFuncMap.value(realIndex).callbackparent;
+					obj->setProperty("cameraIndex", QString::number(realIndex));
+
+					tempsdk->CallbackFuncMap.value(tempsdk->Currentindex).GetimagescallbackFunc(obj, Getimagevector);
+				}
+				Getimagevector.clear();
+				realIndex++;
+				Getimagevector.push_back(heightMat.clone());
+				//cv::imwrite("D:/callback/" + QDateTime::currentDateTime().toString("yyyyMMddhhmmsszzz").toStdString() + ".tiff", heightMat);
+				if (tempsdk->CallbackFuncMap.keys().contains(realIndex))
+				{
+					qDebug() << "Mat Type" << "heightMat" << "out Mat callback" << tempsdk->CallbackFuncMap.keys() << realIndex << tempsdk->getImageMaxCoiunts;
+					QObject* obj = tempsdk->CallbackFuncMap.value(realIndex).callbackparent;
+					obj->setProperty("cameraIndex", QString::number(realIndex));
+					tempsdk->CallbackFuncMap.value(tempsdk->Currentindex).GetimagescallbackFunc(obj, Getimagevector);
+				}
+			}
+			else
+			{
+				if (tempsdk->allowflag.load(std::memory_order::memory_order_acquire))//软触发插入两次需要调两次data接口
+				{
+					vector<cv::Mat> Getimagevector;
+					Getimagevector.push_back(luminanceMat.clone());
+					Getimagevector.push_back(heightMat.clone());
+					tempsdk->ImageMats.push(Getimagevector);
+				}
+				else
+				{
+					qDebug() << __FUNCTION__ << " line:" << __LINE__ << "allowflag is false" << "Not Allow to getimage";
+
+				}
+
+			}
+			/*	if (tempsdk->use_external_batchStart > 0)
+				{
+					if (tempsdk->CallbackFuncMap.size() > tempsdk->Currentindex)
+					{
+						qDebug() << "out Mat callback" << tempsdk->CallbackFuncMap.size() << tempsdk->Currentindex<< tempsdk->getImageMaxCoiunts;
+						QObject* obj = tempsdk->CallbackFuncMap.value(tempsdk->Currentindex).callbackparent;
+						obj->setProperty("cameraIndex", QString::number(tempsdk->Currentindex));
+						qDebug() << "Mat size" << Getimagevector.size();
+						for (const auto& mat : Getimagevector)
+						{
+							qDebug() << mat.cols << mat.rows;
+						}
+						tempsdk->CallbackFuncMap.value(tempsdk->Currentindex).GetimagescallbackFunc(obj, Getimagevector);
+					}
+
+				}
+				else
+				{
+					if (tempsdk->allowflag.load(std::memory_order::memory_order_acquire))
+						tempsdk->ImageMats.push(Getimagevector);
+				}*/
+
+			tempsdk->Currentindex++;
+			if (tempsdk->Currentindex >= tempsdk->getImageMaxCoiunts / tempsdk->OnceGetImageNum)	tempsdk->Currentindex = 0;
+			qDebug() << __FUNCTION__ << " line:" << __LINE__ << " success to acquire 3d image! camera_name: " << dwUser << tempsdk->Currentindex;
+
+		}
+		
+		if (luminanceBuf)
+		{
+			free(luminanceBuf);
+			luminanceBuf = NULL;
+		}
+		if (heightBuf)
+		{
+			free(heightBuf);
+			heightBuf = NULL;
+		}
+		//_imageAvailable[dwUser] = 1;                 // 图像获取成功  dwUser  和 deviceId   一致
+		_lastImageSizeHeight[dwUser] = dwCount;
 	}
 	catch (std::exception e)
 	{
@@ -485,7 +552,7 @@ void myCallbackFunc(LJX8IF_PROFILE_HEADER* pProfileHeaderArray, WORD* pHeightPro
 	}
 }
 
-int cameraFunSDKfactoryCls::LJXA_ACQ_OpenDevice(int lDeviceId, LJX8IF_ETHERNET_CONFIG* EthernetConfig, int HighSpeedPortNo)
+int CameraFunSDKfactoryCls::LJXA_ACQ_OpenDevice(int lDeviceId, LJX8IF_ETHERNET_CONFIG* EthernetConfig, int HighSpeedPortNo)
 {
 	int errCode = LJX8IF_EthernetOpen(lDeviceId, EthernetConfig);
 
@@ -496,15 +563,15 @@ int cameraFunSDKfactoryCls::LJXA_ACQ_OpenDevice(int lDeviceId, LJX8IF_ETHERNET_C
 	return errCode;
 }
 
-void cameraFunSDKfactoryCls::LJXA_ACQ_CloseDevice(int lDeviceId)
+void CameraFunSDKfactoryCls::LJXA_ACQ_CloseDevice(int lDeviceId)
 {
 	LJX8IF_FinalizeHighSpeedDataCommunication(lDeviceId);
 	LJX8IF_CommunicationClose(lDeviceId);
 	qDebug() << __FUNCTION__ << " line:" << __LINE__ << "  Close device!";
 }
 
-Hd_CameraModule_3DKeyence3::Hd_CameraModule_3DKeyence3(int DevicedID,QString ip, QString RootPath, int settype, QObject* parent) :
-	PbGlobalObject(settype, parent), deviceId(DevicedID), RootPath(RootPath),ip(ip)
+Hd_CameraModule_3DKeyence3::Hd_CameraModule_3DKeyence3(int DevicedID, QString ip, QString RootPath, int settype, QObject* parent) :
+	PbGlobalObject(settype, parent), deviceId(DevicedID), RootPath(RootPath), ip(ip)
 {
 
 	famliy = PGOFAMLIY::CAMERA3D;
@@ -512,14 +579,16 @@ Hd_CameraModule_3DKeyence3::Hd_CameraModule_3DKeyence3(int DevicedID,QString ip,
 	LJX8IF_GetSerialNumber(DevicedID, pControllerSerialNo, pHeadSerialNo);
 	SnName = pHeadSerialNo;
 	JsonFile = RootPath + SnName + ".json";
-	QString FirstCreateByte(R"({"DeviceId": ")"+ QString::number(DevicedID)+R"(",
-  "GetOnceImageTimes": "10000",
-  "Ip": ")"+ ip+R"(",
-  "Port": "24691",
-  "xImageSize": "3200",
-  "yImageSize": "1000",
-  "y_pitch_um": "20.0",
-  "OnceImageCounts":"2"})");
+	QString FirstCreateByte(R"({"DeviceId": ")" + QString::number(DevicedID) + R"(",
+	"GetOnceImageTimes": "10000",
+	"Ip": ")" + ip + R"(",
+	"Port": "24691",
+	"xImageSize": "3200",
+	"yImageSize": "1000",
+	"y_pitch_um": "20.0",
+	"OnceImageCounts":"2",
+	"use_external_batchStart":"1",
+	"OnceSignalsGetImageCounts":"6"})");
 	if (!QFile(JsonFile).exists())
 		createAndWritefile(JsonFile, FirstCreateByte.toUtf8());
 	QJsonObject paramObj = load_JsonObjectFile(JsonFile);
@@ -527,8 +596,9 @@ Hd_CameraModule_3DKeyence3::Hd_CameraModule_3DKeyence3(int DevicedID,QString ip,
 	{
 		ParasValueMap.insert(objStr, paramObj.value(objStr).toString());
 	}
-	m_sdkFunc = new cameraFunSDKfactoryCls(DevicedID, RootPath, this);
-	connect(m_sdkFunc, &cameraFunSDKfactoryCls::trigged, this, [=](int value) {emit trigged(value); });
+	m_sdkFunc = new CameraFunSDKfactoryCls(DevicedID, RootPath, this);
+	SDKFunc[deviceId] = m_sdkFunc;
+	connect(m_sdkFunc, &CameraFunSDKfactoryCls::trigged, this, [=](int value) {emit trigged(value); });
 
 }
 
@@ -564,12 +634,14 @@ bool Hd_CameraModule_3DKeyence3::init()
 			m_sdkFunc->Currentindex = 0;
 			m_sdkFunc->ImageMats.clear();
 			m_sdkFunc->allowflag.store(true, std::memory_order::memory_order_release);
+			emit trigged(501);
 		}
 		else if (Code == 1001)
 		{
 			m_sdkFunc->allowflag.store(false, std::memory_order::memory_order_release);
 		}
 		});
+	setParameter(ParasValueMap);
 	bool flag = m_sdkFunc->initSdk(ParasValueMap);
 	if (flag)
 	{
@@ -584,10 +656,12 @@ bool Hd_CameraModule_3DKeyence3::init()
 	if (m_sdkFunc->getTrigger())
 	{
 		type1 = 0;
+		type2 = 0;//不需要需要触发器，外部设置轴到某个位置通过io点触发或者编码器触发，有plc端控制
 	}
 	else
 	{
 		type1 = 1;
+		type2 = 1;//软触发需要等待内部打开批处理成功后方可进行扫描，需要触发器
 	}
 	qDebug() << deviceId << SnName;
 	return flag;
@@ -597,14 +671,28 @@ bool Hd_CameraModule_3DKeyence3::setData(const std::vector<cv::Mat>& mats, const
 {
 	if (mats.empty() && data.isEmpty())//外部调用只做触发
 	{
-		return m_sdkFunc->run();
+		int errCode;
+		errCode = LJX8IF_StartMeasure(deviceId);//开始批处理
+
+		if (errCode == 0)
+		{
+			emit trigged(501);
+			return true;
+		}
+
+		else
+		{
+			qWarning() << "LJX8IF_StartMeasure start error" << errCode;
+			return false;
+		}
+		//return m_sdkFunc->run();
 	}
 	return true;
 }
 //获取数据
 bool Hd_CameraModule_3DKeyence3::data(std::vector<cv::Mat>& ImgS, QStringList& QStringListdata)
 {
-	m_sdkFunc->ImageMats.try_pop(ImgS);
+	m_sdkFunc->ImageMats.wait_for_pop(m_sdkFunc->timeout_ms, ImgS);
 	//ImgS = std::move(Imgout);
 	if (ImgS.empty())
 	{
@@ -614,25 +702,26 @@ bool Hd_CameraModule_3DKeyence3::data(std::vector<cv::Mat>& ImgS, QStringList& Q
 	}
 	return true;
 }
-bool cameraFunSDKfactoryCls::InitHighSpeed()
+
+bool CameraFunSDKfactoryCls::InitHighSpeed()
 {
 	try
 	{
 		if (startReq_ptr == nullptr)
 		{
-			startReq_ptr = new LJX8IF_HIGH_SPEED_PRE_START_REQ;
-			startReq_ptr->bySendPosition = 2;
+			startReq_ptr[deviceId] = new LJX8IF_HIGH_SPEED_PRE_START_REQ;
+			startReq_ptr[deviceId]->bySendPosition = 2;
 			qWarning() << __FUNCTION__ << "  line: " << __LINE__ << " startReq_ptr is null! ";
 		}
 		if (profileInfo_ptr == nullptr)
 		{
-			profileInfo_ptr = new LJX8IF_PROFILE_INFO;
+			profileInfo_ptr[deviceId] = new LJX8IF_PROFILE_INFO;
 			qWarning() << __FUNCTION__ << "  line: " << __LINE__ << " profileInfo_ptr is null! ";
 		}
 		errCode = LJX8IF_InitializeHighSpeedDataCommunicationSimpleArray(deviceId, &_ethernetConfig[deviceId], HighSpeedPortNo, &myCallbackFunc, yImageSize, deviceId); // 初始化高速通讯
-		qDebug() << __FUNCTION__ << " line:" << __LINE__ << "   errCode:" << errCode;
-		errCode = LJX8IF_PreStartHighSpeedDataCommunication(deviceId, startReq_ptr, profileInfo_ptr);              // 预开始启动高速通信，作用 做预连接
-		qDebug() << __FUNCTION__ << " line:" << __LINE__ << "   errCode:" << errCode;
+		//qDebug() << __FUNCTION__ << " line:" << __LINE__ << "   errCode:" << errCode;
+		errCode = LJX8IF_PreStartHighSpeedDataCommunication(deviceId, startReq_ptr[deviceId], profileInfo_ptr[deviceId]);              // 预开始启动高速通信，作用 做预连接
+		//qDebug() << __FUNCTION__ << " line:" << __LINE__ << "   errCode:" << errCode;
 
 		// zUnit
 		errCode = LJX8IF_GetZUnitSimpleArray(deviceId, &zUnit);
@@ -652,10 +741,11 @@ bool cameraFunSDKfactoryCls::InitHighSpeed()
 	return true;
 
 }
-void cameraFunSDKfactoryCls::upDateParam()
+
+void CameraFunSDKfactoryCls::upDateParam()
 {
 	timeout_ms = ParasValueMap.value("GetOnceImageTimes").toInt();
-	QStringList IpList = ParasValueMap.value("GetOnceImageTimes").split('.');
+	QStringList IpList = ParasValueMap.value("Ip").split('.');
 	if (IpList.size() != 4)
 		return;
 	EthernetConfig.abyIpAddress[0] = IpList.at(0).toInt();
@@ -667,9 +757,13 @@ void cameraFunSDKfactoryCls::upDateParam()
 	yImageSize = ParasValueMap.value("yImageSize").toInt();
 	y_pitch_um = ParasValueMap.value("y_pitch_um").toFloat();
 	deviceId = ParasValueMap.value("DeviceId").toInt();
+	use_external_batchStart = ParasValueMap.value("use_external_batchStart").toInt();
+	getImageMaxCoiunts = ParasValueMap.value("OnceSignalsGetImageCounts").toInt();
+	OnceGetImageNum = ParasValueMap.value("OnceImageCounts").toInt();
 	return;
 }
-bool cameraFunSDKfactoryCls::run()
+
+bool CameraFunSDKfactoryCls::run()
 {
 	if (!isopen)
 	{
@@ -679,154 +773,6 @@ bool cameraFunSDKfactoryCls::run()
 
 	try
 	{
-		errCode = LJX8IF_StartHighSpeedDataCommunication(deviceId);           // 正式开始高速通讯
-		qDebug() << __FUNCTION__ << " line:" << __LINE__ << " errCode: " << errCode;
-		if (errCode != 0x80A1 && errCode != 0x0000)
-		{
-			qDebug() << __FUNCTION__ << " line:" << __LINE__ << "   Restart HighSpeedDataCommunication";
-			errCode = LJX8IF_StopHighSpeedDataCommunication(deviceId);
-			qDebug() << __FUNCTION__ << " line:" << __LINE__ << "   Stop HSC errCode:" << errCode;
-			errCode = LJX8IF_FinalizeHighSpeedDataCommunication(deviceId);
-			qDebug() << __FUNCTION__ << " line:" << __LINE__ << "   Fini HSC errCode:" << errCode;
-			errCode = LJX8IF_InitializeHighSpeedDataCommunicationSimpleArray(deviceId, &_ethernetConfig[deviceId], HighSpeedPortNo, &myCallbackFunc, yImageSize, deviceId); // 初始化高速通讯
-			qDebug() << __FUNCTION__ << " line:" << __LINE__ << "   Init HSC errCode:" << errCode;
-			errCode = LJX8IF_PreStartHighSpeedDataCommunication(deviceId, startReq_ptr, profileInfo_ptr);              // 预开始启动高速通信，作用 做预连接
-			qDebug() << __FUNCTION__ << " line:" << __LINE__ << "   PreStart HSC errCode:" << errCode;
-			errCode = LJX8IF_StartHighSpeedDataCommunication(deviceId);           // 正式开始高速通讯
-			qDebug() << __FUNCTION__ << " line:" << __LINE__ << "   Start HSC errCode: " << errCode;
-		}
-
-		// Allocate memory
-		if (_heightBuf[deviceId])
-		{
-			free(_heightBuf[deviceId]);
-			_heightBuf[deviceId] = NULL;
-		}
-
-		if (_luminanceBuf[deviceId])
-		{
-			free(_luminanceBuf[deviceId]);
-			_luminanceBuf[deviceId] = NULL;
-		}
-		int yDataNum = setParam_Ptr->y_linenum;
-		_heightBuf[deviceId] = (unsigned short*)malloc(yDataNum * MAX_LJXA_XDATANUM * 2);
-		_luminanceBuf[deviceId] = (unsigned short*)malloc(yDataNum * MAX_LJXA_XDATANUM * 2);
-
-		if (_heightBuf[deviceId] == NULL)
-		{
-			return false;
-		}
-
-		if (_luminanceBuf[deviceId] == NULL)
-		{
-			return false;
-		}
-
-		int errCode;
-		//Start HighSpeed
-		_imageAvailable[deviceId] = 0;
-		_lastImageSizeHeight[deviceId] = 0;
-
-		//StartMeasure(Batch Start)
-		if (use_external_batchStart > 0)
-		{
-		}
-		else
-		{
-			errCode = LJX8IF_StartMeasure(deviceId);  // 启动软件触发,等同于软件中点击开始批处理操作
-			qCritical() << __FUNCTION__ << " line:" << __LINE__ << "  Measure Start(Batch Start) ! errCode:" << errCode;
-		}
-
-		qDebug() << __FUNCTION__ << "  line:" << __LINE__ << " acquring image...! ";
-
-		//emit trigged(501);
-		DWORD start = clock();
-		while (true)
-		{
-			DWORD ts = clock() - start;
-			if ((DWORD)timeout_ms < ts)
-			{
-				qCritical() << __FUNCTION__ << "  line:" << __LINE__ << "   timeout_ms " << ts;
-				break;
-			}
-			if (_imageAvailable[deviceId])
-			{
-				qDebug() << " [info] " << __FUNCTION__ << " line:" << __LINE__ << " deviceId::" << deviceId << " checkImg getImg time" << ts << " imgIndex" << Currentindex++;
-				break;
-			}
-			Sleep(1);
-		}
-		Sleep(1);
-		if (_imageAvailable[deviceId] != 1)
-		{
-			qCritical() << __FUNCTION__ << "  line:" << __LINE__ << "_imageAvailable[deviceId] != 1";
-			//Free memory
-			if (_heightBuf[deviceId] != NULL)
-			{
-				free(_heightBuf[deviceId]);
-				_heightBuf[deviceId] = NULL;
-			}
-
-			if (_luminanceBuf[deviceId] != NULL)
-			{
-				free(_luminanceBuf[deviceId]);
-				_luminanceBuf[deviceId] = NULL;
-			}
-			// KeyModify   20230301 清理控制器里的缓存数据，此处是考虑超时情况下，对数据的清理操作。
-			errCode = LJX8IF_ClearMemory(deviceId);
-			qCritical() << __FUNCTION__ << "  line:" << __LINE__ << "   errCode:" << errCode;
-			return false;
-		}
-		// qDebug() << __FUNCTION__ << " line:" << __LINE__ << "test";
-		_getParam[deviceId].luminance_enabled = profileInfo_ptr->byLuminanceOutput;
-		_getParam[deviceId].x_pointnum = profileInfo_ptr->wProfileDataCount;
-		_getParam[deviceId].y_linenum_acquired = _lastImageSizeHeight[deviceId];
-		_getParam[deviceId].x_pitch_um = profileInfo_ptr->lXPitch / 100.0f;
-		_getParam[deviceId].y_pitch_um = y_pitch_um;
-		_getParam[deviceId].z_pitch_um = zUnit / 100.0f;
-
-		*getParam_Ptr = _getParam[deviceId];
-		//qDebug() << __FUNCTION__ << " line:" << __LINE__ << " getPara Finished: ";
-		int xDataNum = _getParam[deviceId].x_pointnum;
-
-		unsigned short* dwHeightBuf = (unsigned short*)&_heightBuf[deviceId][0];
-		//qDebug() << __FUNCTION__ << " line:" << __LINE__ << " dwHeightBuf Init Finished: ";
-		memcpy(heightImage, dwHeightBuf, xDataNum * yImageSize * 2);
-
-		//qDebug() << __FUNCTION__ << " line:" << __LINE__ << " Height Img memcpy Finished: ";
-		if (_getParam[deviceId].luminance_enabled > 0)
-		{
-			unsigned short* dwLuminanceBuf = (unsigned short*)&_luminanceBuf[deviceId][0];
-			memcpy(luminanceImage, dwLuminanceBuf, xDataNum * yImageSize * 2);
-		}
-
-		// Free memory
-		if (_heightBuf[deviceId] != NULL)
-		{
-			free(_heightBuf[deviceId]);
-			_heightBuf[deviceId] = NULL;
-		}
-
-		if (_luminanceBuf[deviceId] != NULL)
-		{
-			free(_luminanceBuf[deviceId]);
-			_luminanceBuf[deviceId] = NULL;
-		}
-		//qDebug() << __FUNCTION__ << " line:" << __LINE__ << " Free memory Finished: ";
-		if (allowflag.load(std::memory_order::memory_order_acquire))
-		{
-			vector<cv::Mat> Getimagevector;
-			Getimagevector.push_back(cv::Mat(yImageSize, xImageSize, CV_8UC1, luminanceImage));
-			Getimagevector.push_back(cv::Mat(yImageSize, xImageSize, CV_16U, heightImage));
-			ImageMats.push(Getimagevector);
-			qDebug() << __FUNCTION__ << " line:" << __LINE__ << " success to acquire 3d image! camera_name: " << deviceId;
-
-		}
-		else
-		{
-			qDebug() << __FUNCTION__ << " line:" << __LINE__ << "allowflag is false" << "Not Allow to getimage";
-
-		}
 		return true;
 	}
 	catch (QString ev)
@@ -838,7 +784,15 @@ bool cameraFunSDKfactoryCls::run()
 
 bool create(const QString& DeviceSn, const QString& name, const QString& path)
 {
+	if (DeviceSn.isEmpty() || name.isEmpty() || path.isEmpty())
+		return false;
+	if (TotalMap.keys().contains(name.split(':').first())) return true;
 	int indexSn = -1;
+	if (name.endsWith("old"))
+	{
+		getCameraSnList();//后面创建重新查询
+
+	}
 	for (int i = 0; i < TotalSnIpVec.size(); i++)
 	{
 		if (TotalSnIpVec.at(i).first == DeviceSn)
@@ -846,9 +800,10 @@ bool create(const QString& DeviceSn, const QString& name, const QString& path)
 	}
 	if (indexSn == -1)
 	{
-		qCritical() << "NOT Found Device ID"  << DeviceSn;
+		qCritical() << "NOT Found Device ID" << DeviceSn;
 		return false;
 	}
+	qDebug() << DeviceSn << name << path;
 	OnePb temp;
 	temp.base = new Hd_CameraModule_3DKeyence3(indexSn, TotalSnIpVec.at(indexSn).second, path + "/Hd_CameraModule_3DKeyence3/");
 	if (!temp.base->init())
@@ -856,7 +811,7 @@ bool create(const QString& DeviceSn, const QString& name, const QString& path)
 	temp.baseWidget = new mPrivateWidget(temp.base);
 	temp.DeviceSn = DeviceSn;
 	TotalMap.insert(name.split(':').first(), temp);
-	return  true;	
+	return  true;
 }
 
 void destroy(const QString& name)
@@ -872,18 +827,21 @@ void destroy(const QString& name)
 	}
 
 }
+
 QWidget* getCameraWidgetPtr(const QString& name)
 {
 	if (TotalMap.value(name).baseWidget)
 		return TotalMap.value(name).baseWidget;
 	return nullptr;
 }
+
 PbGlobalObject* getCameraPtr(const QString& name)
 {
 	if (TotalMap.value(name).base)
 		return TotalMap.value(name).base;
 	return nullptr;
 }
+
 QStringList getCameraSnList()
 {
 	QStringList temp;
@@ -900,26 +858,26 @@ QStringList getCameraSnList()
 		EthernetConfig.abyIpAddress[3] = str.split('.').at(3).toInt();
 		EthernetConfig.wPortNo = 24691;
 		int errCode = LJX8IF_EthernetOpen(index, &EthernetConfig);
-		if (errCode == 0)		
+		if (errCode == 0)
 		{
 			resVec.push_back(str);
 			if (resVec.size() >= MAX_LJXA_DEVICENUM) break;
 			index++;
 			qDebug() << __FUNCTION__ << " line:" << __LINE__ << "  Open device ! errCode:" << errCode;
 		}
-		
-		
+
+
 	}
-	for (int o = 0;  o < resVec.size();  o++)
+	for (int o = 0; o < resVec.size(); o++)
 	{
 		//if (resVec.at(o) == 0)
 		{
-			char pControllerSerialNo[20]; char pHeadSerialNo [20];
+			char pControllerSerialNo[20]; char pHeadSerialNo[20];
 			LJX8IF_GetSerialNumber(o, pControllerSerialNo, pHeadSerialNo);
 			//qDebug() << sizeof(pControllerSerialNo);
 			//if (sizeof(pControllerSerialNo)!=20 || sizeof(pControllerSerialNo) != 20)
 				//continue;
-			qDebug() <<"Get Device"<<"index"<<o <<"\t" <<"pControllerSerialNo" << pControllerSerialNo <<"pHeadSerialNo" << pHeadSerialNo;
+			qDebug() << "Get Device" << "index" << o << "\t" << "pControllerSerialNo" << pControllerSerialNo << "pHeadSerialNo" << pHeadSerialNo;
 			QPair<QString, QString> tempPair;
 			tempPair.first = pHeadSerialNo;
 			tempPair.second = resVec.at(o);
@@ -927,7 +885,7 @@ QStringList getCameraSnList()
 			temp << pHeadSerialNo;
 		}
 	}
-
+	qDebug() << TotalSnIpVec;
 	// 查询已经使用的
 	foreach(const auto& tmp, TotalMap)
 	{
@@ -947,13 +905,35 @@ mPrivateWidget::mPrivateWidget(void* handle)
 
 void mPrivateWidget::InitWidget()
 {
-	QVBoxLayout* MainLayout = new QVBoxLayout(this);
+	QHBoxLayout* mainHboxLayout = new QHBoxLayout(this);
+	QVBoxLayout* MainLayout = new QVBoxLayout;
 
 	SetDataBtn = new QPushButton(this);
+	SetDataBtn->setText(tr("软触发"));
+	OpenGrapMat = new QPushButton(this);
+	OpenGrapMat->setText(tr("允许取图"));
+	NotGrapMat = new QPushButton(this);
+	NotGrapMat->setText(tr("禁止取图"));
 	m_showimage = new ImageViewer(this);
+	//qDebug() << m_Camerahandle->GetRootPath() + "/" + m_Camerahandle->GetSn() + ".json";
+	m_AlgParmWidget = new AlgParmWidget(m_Camerahandle->GetRootPath() + "/" + m_Camerahandle->GetSn() + ".json");
+	connect(m_AlgParmWidget, &AlgParmWidget::SengCurrentByte, this, [=](QByteArray byte) {
+
+		QJsonObject paramObj = QJsonDocument::fromJson(byte).object();
+		QMap<QString, QString> ParameterMap;
+		for (auto objStr : paramObj.keys())
+		{
+			ParameterMap.insert(objStr, paramObj.value(objStr).toString());
+		}
+		m_Camerahandle->setParameter(ParameterMap);
+
+		});
 	MainLayout->addWidget(m_showimage);
 	MainLayout->addWidget(SetDataBtn);
-
+	MainLayout->addWidget(OpenGrapMat);
+	MainLayout->addWidget(NotGrapMat);
+	connect(OpenGrapMat, &QPushButton::clicked, this, [=]() {emit m_Camerahandle->trigged(1000); });
+	connect(NotGrapMat, &QPushButton::clicked, this, [=]() {emit m_Camerahandle->trigged(1001); });
 	connect(SetDataBtn, &QPushButton::clicked, this, [=]() {
 		std::vector<cv::Mat> mats;  QStringList list;
 		emit m_Camerahandle->trigged(1000);
@@ -962,6 +942,9 @@ void mPrivateWidget::InitWidget()
 		cv::Mat tempMat = mats.at(0);
 		m_showimage->loadImage(QPixmap::fromImage(cvMatToQImage(tempMat)));
 		});
+	mainHboxLayout->addLayout(MainLayout, 4);
+	mainHboxLayout->addWidget(m_AlgParmWidget, 3);
+
 	/*connect(m_Camerahandle, &Hd_CameraModule_3DKeyence3::sendMats, this, [=](cv::Mat getMat) {
 
 		m_showimage->loadImage(QPixmap::fromImage(cvMatToQImage(getMat)));

@@ -1,6 +1,7 @@
 #ifndef Hd_CameraModule_3DKeyence_H
 #define Hd_CameraModule_3DKeyence_H
-#pragma once
+#pragma execution_character_set("utf-8")
+
 #include <QtCore/qglobal.h>
 #include <QByteArray>
 #include <QDebug>
@@ -21,9 +22,10 @@
 #include "ThreadSafeQueue.h"
 #include <struct.h>
 #include <imageView.h>
+//#include <MyTableWidget.h>
+#include <AlgParm.h>
 const int MAX_LJXA_DEVICENUM = 6;
 //#pragma comment(lib, "winmm.lib")
-#pragma execution_character_set("utf-8")
 using namespace std;
 using namespace cv;
 typedef struct {
@@ -50,12 +52,12 @@ struct CallbackFuncPack
     PBGLOBAL_CALLBACK_FUN GetimagescallbackFunc;
     QString cameraIndex;
 };
-class cameraFunSDKfactoryCls :public QObject
+class CameraFunSDKfactoryCls :public QObject
 {
     Q_OBJECT
 public:
-    cameraFunSDKfactoryCls(int DevicedID, QString rootPath,QObject* parent);
-    ~cameraFunSDKfactoryCls();
+    CameraFunSDKfactoryCls(int DevicedID, QString rootPath,QObject* parent);
+    ~CameraFunSDKfactoryCls();
     bool initSdk(QMap<QString, QString>& insideValuesMaps);
     int  LJXA_ACQ_OpenDevice(int lDeviceId, LJX8IF_ETHERNET_CONFIG* EthernetConfig, int HighSpeedPortNo);
     void LJXA_ACQ_CloseDevice(int lDeviceId);
@@ -70,23 +72,22 @@ public:
 
     ThreadSafeQueue<vector<cv::Mat>> ImageMats;//图像缓存队列
 
-    QVector<CallbackFuncPack> CallbackFuncVec;
-    LJX8IF_HIGH_SPEED_PRE_START_REQ* startReq_ptr = nullptr;
-    LJX8IF_PROFILE_INFO* profileInfo_ptr = nullptr;
+    QMap<int,CallbackFuncPack> CallbackFuncMap;
+   
 
     // Static variable
     int Currentindex = 0;
-
+    int getImageMaxCoiunts = 1;//一次信号取图次数
     int deviceId = 0;			 // Set "0" if you use only 1 head.
     int xImageSize = 0;			 // Number of X points.
     int yImageSize = 0;			 // Number of Y lines.
     float y_pitch_um = 0;		 // Data pitch of Y data. (e.g. your encoder setting)
     int	timeout_ms = 0;		 // Timeout value for the acquiring image (in milisecond).
-    int use_external_batchStart = 0; // Set "1" if you controll the batch start timing externally. (e.g. terminal input) 0内部触发，1外部触发
+    int use_external_batchStart = 1; // Set "1" if you controll the batch start timing externally. (e.g. terminal input) 0内部触发，1外部触发
     unsigned short zUnit = 0;
 
-    unsigned short* heightImage = nullptr;		    // Height image
-    unsigned short* luminanceImage = nullptr;		// Luminance image
+    //unsigned short* heightImage = nullptr;		    // Height image
+    //unsigned short* luminanceImage = nullptr;		// Luminance image
 
     LJXA_ACQ_SETPARAM* setParam_Ptr = nullptr;
     LJXA_ACQ_GETPARAM* getParam_Ptr = nullptr;
@@ -100,6 +101,7 @@ public:
     //int	recontimeout_ms = 3000;
 
     QMap<QString, QString> ParasValueMap;
+    int OnceGetImageNum = 2;//一次趣图出图数量
 signals:
     void trigged(int);
 };
@@ -130,7 +132,8 @@ public:
     //注册回调 string对应自身的参数协议 （自定义）
     void registerCallBackFun(PBGLOBAL_CALLBACK_FUN, QObject*, const QString&);
     void cancelCallBackFun(PBGLOBAL_CALLBACK_FUN, QObject*, const QString&);
-
+    QString GetRootPath() const { return RootPath; } 
+    QString GetSn() const { return SnName; }
 private:
     QString ip;
     QString JsonFile;
@@ -138,7 +141,7 @@ private:
     QString HeanSn;
     int deviceId = 0;
     QString SnName;
-    cameraFunSDKfactoryCls* m_sdkFunc = nullptr;
+    CameraFunSDKfactoryCls* m_sdkFunc = nullptr;
     //参数设置的数据
     QMap<QString, QString> ParasValueMap;
 };
@@ -151,7 +154,11 @@ public:
     ~mPrivateWidget() {};
     void InitWidget();
     QPushButton* SetDataBtn;
+    QPushButton* OpenGrapMat;
+    QPushButton* NotGrapMat;
     ImageViewer* m_showimage;
+    //MyTableWidget* m_paramsTable;
+    AlgParmWidget* m_AlgParmWidget;
     Hd_CameraModule_3DKeyence3* m_Camerahandle = nullptr;
 
 };

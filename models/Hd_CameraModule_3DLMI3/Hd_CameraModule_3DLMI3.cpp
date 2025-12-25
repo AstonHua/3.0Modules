@@ -247,7 +247,18 @@ kStatus kCall onData(void* ctx, void* sys, void* dataset)
 bool InitLmi(k32u ID, CameraFunSDKfactoryCls* m_CameraFunSDKfactoryCls)
 {
 	kStatus status;
-	if ((status = GoSystem_FindSensorById(m_CameraFunSDKfactoryCls->system1, ID, &m_CameraFunSDKfactoryCls->sensor)) != kOK)
+
+	if ((status = GoSdk_Construct(&m_CameraFunSDKfactoryCls->api)) != kOK)
+	{
+		printf("Error: GoSdk_Construct:%d\n", status);
+		return false;
+	}
+	if ((status = GoSystem_Construct(&m_CameraFunSDKfactoryCls->system1, kNULL)) != kOK)
+	{
+		printf("Error: GoSystem_Construct:%d\n", status);
+		return false;
+	}
+	if ((status = GoSystem_FindSensorById(m_CameraFunSDKfactoryCls->system1, m_CameraFunSDKfactoryCls->k32u_id ,&m_CameraFunSDKfactoryCls->sensor)) != kOK)
 	{
 		//printf("Error: GoSystem_FindSensor:%d\n", status);
 		qDebug() << "[Error] " << "Error: GoSystem_FindSensor:%d\n", status;
@@ -319,6 +330,7 @@ Hd_CameraModule_3DLMI3::Hd_CameraModule_3DLMI3(QString DeviceSn, QString RootPat
 {
 	famliy = PGOFAMLIY::CAMERA3D;	
 	SnName = DeviceSn;
+	
 	JsonFile = RootPath + SnName + ".json";
 	if (!QFile(JsonFile).exists())
 		createAndWritefile(JsonFile, FirstCreateByte);
@@ -328,6 +340,7 @@ Hd_CameraModule_3DLMI3::Hd_CameraModule_3DLMI3(QString DeviceSn, QString RootPat
 		ParasValueMap.insert(objStr, paramObj.value(objStr).toString());
 	}
 	m_sdkFunc = new CameraFunSDKfactoryCls(DeviceSn, RootPath, this);
+	//m_sdkFunc->k32u_id = SnName.toInt();
 	connect(m_sdkFunc, &CameraFunSDKfactoryCls::trigged, this, [=](int value) {emit trigged(value); });
 }
 
@@ -412,7 +425,7 @@ bool Hd_CameraModule_3DLMI3::data(std::vector<cv::Mat>& ImgS, QStringList& data)
 	m_sdkFunc->ImageMats.wait_for_pop(3000, ImgS);
 	if (ImgS.empty())
 	{
-		ImgS.push_back(cv::Mat::zeros(100, 100, 0));
+		//ImgS.push_back(cv::Mat::zeros(100, 100, 0));
 		qCritical() << __FUNCTION__ << "   line:" << __LINE__ << " srcImage is null";
 		return false;
 	}
@@ -512,10 +525,21 @@ PbGlobalObject* getCameraPtr(const QString& name)
 QStringList getCameraSnList()
 {
 	QStringList temp;	
+	kStatus status;
+	GoSystem system1=kNULL;
+	kAssembly api = kNULL;
+	if ((status = GoSdk_Construct(&api)) != kOK)
+	{
+		printf("Error: GoSdk_Construct:%d\n", status);
+	}
+	if ((status = GoSystem_Construct(&system1, kNULL)) != kOK)
+	{
+		printf("Error: GoSystem_Construct:%d\n", status);
+	}
 	for (int i = 0; i < GoSystem_SensorCount(SYSTEMGO); i++)
 	{
-		GoSensor tempSenor = GoSystem_SensorAt(SYSTEMGO, i);
-		k32u getId = GoSensor_BuddyId(tempSenor);
+		GoSensor tempSenor = GoSystem_SensorAt(system1, i);
+		k32u getId = GoSensor_Id(tempSenor);
 		temp << QString::number(getId);
 	}
 	// 查询已经使用的
@@ -530,9 +554,8 @@ QStringList getCameraSnList()
 }
 
 CameraFunSDKfactoryCls::CameraFunSDKfactoryCls(QString sn, QString path, QObject* parent)
-	: k32u_id(sn.toUShort()), parent(parent), RootPath(path)
+	: k32u_id(sn.toInt()), parent(parent), RootPath(path)
 {
-
 }
 
 CameraFunSDKfactoryCls::~CameraFunSDKfactoryCls()

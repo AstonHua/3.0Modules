@@ -1,7 +1,5 @@
 ﻿#include "Hd_CameraModule_HIK3.h"
 #pragma execution_character_set("utf-8")
-const QByteArray FirstCreateByte(R"({"OneSgnalsGetImageCounts": "1","SeralNum": "","OneGetImageTimeOut": "","LastUpdateTime": "","TriggerSource": "hard"})");
-
 struct OnePb
 {
 	PbGlobalObject* base = nullptr;
@@ -124,7 +122,7 @@ int SearchDevice()
 
 bool connctDevice(string GetSnName, void* handle, void* pUser)
 {
-	CameraFunSDKfactoryCls* CurrentCamera = reinterpret_cast<CameraFunSDKfactoryCls*>(pUser);
+	CameraFunSDKfactoryCls* CurrentCamera = (CameraFunSDKfactoryCls*)(pUser);
 	if (!SearchDevice())
 		return false;
 	int index = 0;
@@ -172,6 +170,7 @@ bool connctDevice(string GetSnName, void* handle, void* pUser)
 		return false;
 	MV_CC_StartGrabbing(handle);
 	CurrentCamera->handle = std::move(handle);
+	qDebug() << "pUser0" << CurrentCamera;
 	return true;
 }
 
@@ -206,7 +205,9 @@ void __stdcall ImageCallBackEx(unsigned char* pData0, MV_FRAME_OUT_INFO_EX* pFra
 	double time_Start = (double)clock();
 	int frameNum = 0;
 	cv::Mat srcImage = cv::Mat();
-	CameraFunSDKfactoryCls* CurrentCamera = reinterpret_cast<CameraFunSDKfactoryCls*>(pUser0);
+	std::vector<cv::Mat> OutMats;
+	CameraFunSDKfactoryCls* CurrentCamera = (CameraFunSDKfactoryCls*)(pUser0);
+	qDebug()<< CurrentCamera << pUser0;
 	if (pFrameInfo0)
 	{
 		//获取的是单通道灰度图
@@ -266,29 +267,46 @@ void __stdcall ImageCallBackEx(unsigned char* pData0, MV_FRAME_OUT_INFO_EX* pFra
 			//}
 			//testflag.store(false, std::memory_order::memory_order_seq_cst);
 		}
-	}
-	if (srcImage.empty())
-	{
-		srcImage = cv::Mat(5, 5, CV_8UC1).setTo(0);
-	}
+		if (srcImage.empty())
+		{
+			srcImage = cv::Mat(5, 5, CV_8UC1).setTo(0);
+		}
 
-	if (CurrentCamera->allowflag.load(std::memory_order::memory_order_acquire))
-	{
-		CurrentCamera->MatQueue.push(srcImage.clone());
 	}
-	srcImage.release();
+	//if (CurrentCamera->allowflag.load(std::memory_order::memory_order_acquire))
+	{
+		OutMats.push_back(srcImage.clone());
+		if (CurrentCamera->m_MV_CAM_TRIGGER_SOURCE == MV_TRIGGER_SOURCE_SOFTWARE)
+		{
+			if (CurrentCamera->allowflag.load(std::memory_order::memory_order_acquire))
+				CurrentCamera->MatQueue.push(OutMats);
+		}
+		else
+		{
+			qDebug() << CurrentCamera->Currentindex;
+			///硬触发不受开关控制，没有缓存
+			if (CurrentCamera->CallbackFuncMap.keys().contains(CurrentCamera->Currentindex))
+			{
+				QObject* obj = CurrentCamera->CallbackFuncMap.value(CurrentCamera->Currentindex).callbackparent;
+				obj->setProperty("cameraIndex", QString::number(CurrentCamera->Currentindex));
+				CurrentCamera->CallbackFuncMap.value(CurrentCamera->Currentindex).GetimagescallbackFunc(obj, OutMats);
+			}
+			else
+			{
+				qWarning() << "CallbackFuncMap.keys()" << CurrentCamera->CallbackFuncMap.keys() << CurrentCamera->Currentindex;
+			}
+		}
+	}
+	CurrentCamera->Currentindex++;
+	if (CurrentCamera->Currentindex >= CurrentCamera->getImageMaxCoiunts / CurrentCamera->OnceGetImageNum)	CurrentCamera->Currentindex = 0;
 
 	pData0 = { 0 };
 	QDateTime curT = QDateTime::currentDateTime();
 	double time_End = (double)clock();
 
-	qDebug() << "[INFO] " << " line:" << __LINE__ << " checkImg getImg,Time:" << (time_End - time_Start) << "ms"
-		<< "--CameraName:" << QString::fromLocal8Bit(CurrentCamera->Username.c_str()) << " timepoint " << curT.toString("hh:mm:ss.zzz")\
-		<< " imgIndex:" << CurrentCamera->Currentindex++ << "nFrameNum : " << pFrameInfo0->nFrameNum;
-	/*QString savePath = "../runtime/Bin_DEVICE/testImg/camera_" + QString::number(imgIndex + 1)+".png";
-	cv::Mat resizeS;
-	cv::resize(srcImage, resizeS, cv::Size(), 0.1, 0.1);
-	cv::imwrite(savePath.toStdString(), resizeS);*/
+	qDebug() << " checkImg getImg,Time:" << (time_End - time_Start) << "ms"
+		<< "--CameraName:" << QString::fromLocal8Bit(CurrentCamera->SnCode.c_str()) << " timepoint " << curT.toString("hh:mm:ss.zzz")\
+		<< " imgIndex:" << CurrentCamera->Currentindex << "nFrameNum : " << pFrameInfo0->nFrameNum;
 }
 
 CameraFunSDKfactoryCls::~CameraFunSDKfactoryCls()
@@ -298,6 +316,9 @@ CameraFunSDKfactoryCls::~CameraFunSDKfactoryCls()
 
 bool CameraFunSDKfactoryCls::initSdk(QMap<QString, QString>& insideValuesMaps)
 {
+	/*getImageMaxCoiunts = insideValuesMaps.value("OnceSignalsGetImageCoutns").toInt();
+	OnceGetImageNum = insideValuesMaps.value("OnceImageCounts").toInt();
+	timeOut = insideValuesMaps.value("GetOnceImageTimes").toInt();*/
 	if (!connctDevice(SnCode, getHandle(), this))
 	{
 		emit trigged(1);
@@ -316,16 +337,27 @@ bool CameraFunSDKfactoryCls::initSdk(QMap<QString, QString>& insideValuesMaps)
 
 void CameraFunSDKfactoryCls::upDateParam()
 {
+	getImageMaxCoiunts = ParasValueMap.value("OnceSignalsGetImageCounts").toInt();
+	OnceGetImageNum = ParasValueMap.value("OnceImageCounts").toInt();
+	timeOut = ParasValueMap.value("GetOnceImageTimes").toInt();
+	qDebug() << getImageMaxCoiunts << OnceGetImageNum;
 	return;
 }
 //类创建
-Hd_CameraModule_HIK3::Hd_CameraModule_HIK3(QString sn,QString path, int settype, QObject* parent) 
-	: PbGlobalObject(settype, parent), Sncode(sn),RootPath(path)
+Hd_CameraModule_HIK3::Hd_CameraModule_HIK3(QString sn, QString path, int settype, QObject* parent)
+	: PbGlobalObject(settype, parent), Sncode(sn), RootPath(path)
 {
 	famliy = CAMERA2D;
 	JsonFilePath = RootPath + Sncode + ".json";
+	QString FirstCreateByte(R"({
+	"SeralNum": ")" + sn + R"(",
+	"GetOnceImageTimes": "1000",
+	"LastUpdateTime": "",
+	"OnceImageCounts":"1",
+	"OnceSignalsGetImageCounts":"20"})");
+
 	if (!QFile(JsonFilePath).exists())
-		createAndWritefile(JsonFilePath, FirstCreateByte);
+		createAndWritefile(JsonFilePath, FirstCreateByte.toUtf8());
 	QJsonObject paramObj = load_JsonFile(JsonFilePath);
 	for (auto objStr : paramObj.keys())
 	{
@@ -337,7 +369,6 @@ Hd_CameraModule_HIK3::Hd_CameraModule_HIK3(QString sn,QString path, int settype,
 
 Hd_CameraModule_HIK3::~Hd_CameraModule_HIK3()
 {
-
 	if (m_sdkFunc)
 	{
 		delete m_sdkFunc;
@@ -353,12 +384,12 @@ QMap<QString, QString> Hd_CameraModule_HIK3::parameters()
 //初始化参数；通信/相机的初始化参数
 bool Hd_CameraModule_HIK3::setParameter(const QMap<QString, QString>& ParameterMap)
 {
-	ParasValueMap = ParasValueMap;
+	ParasValueMap = ParameterMap;
+	m_sdkFunc->ParasValueMap = ParasValueMap;
 
 	m_sdkFunc->upDateParam();
 	return true;
 }
-
 //初始化(加载模块待内存)
 bool Hd_CameraModule_HIK3::init()
 {
@@ -368,18 +399,22 @@ bool Hd_CameraModule_HIK3::init()
 			m_sdkFunc->Currentindex = 0;
 			m_sdkFunc->MatQueue.clear();
 			m_sdkFunc->allowflag.store(true, std::memory_order::memory_order_release);
+			emit trigged(501);
 		}
 		else if (Code == 1001)
 		{
 			m_sdkFunc->allowflag.store(false, std::memory_order::memory_order_release);
 		}
 		});
+	setParameter(ParasValueMap);
 	bool flag = m_sdkFunc->initSdk(ParasValueMap);
 	if (m_sdkFunc->m_MV_CAM_TRIGGER_SOURCE == MV_TRIGGER_SOURCE_SOFTWARE)
 		type1 = 1;
-	else if(m_sdkFunc->m_MV_CAM_TRIGGER_SOURCE < 4)
+	else if (m_sdkFunc->m_MV_CAM_TRIGGER_SOURCE < 4)
 		type1 = 0;
-	qDebug() << m_sdkFunc->handle;
+	type2 = 0;//不需要需要触发器，出图完成后给plc信号即可
+	//qDebug() << m_sdkFunc->handle;
+	qDebug() << "SDKFUNC" << m_sdkFunc;
 	return flag;
 }
 
@@ -389,7 +424,7 @@ bool Hd_CameraModule_HIK3::setData(const std::vector<cv::Mat>& mats, const QStri
 	if (mats.empty() && data.isEmpty())
 	{
 		MV_CC_SetCommandValue(m_sdkFunc->handle, "TriggerSoftware");
-		emit trigged(501);
+		//emit trigged(501);
 		return true;
 	}
 	return true;
@@ -397,15 +432,14 @@ bool Hd_CameraModule_HIK3::setData(const std::vector<cv::Mat>& mats, const QStri
 //获取数据
 bool Hd_CameraModule_HIK3::data(std::vector<cv::Mat>& ImgS, QStringList& QStringListdata)
 {
-	cv::Mat image;
-	m_sdkFunc->MatQueue.wait_for_pop(3000, image);
-	if (image.empty())
+
+	m_sdkFunc->MatQueue.wait_for_pop(m_sdkFunc->timeOut, ImgS);
+	if (ImgS.empty())
 	{
 		ImgS.push_back(cv::Mat::zeros(100, 100, 0));
 		qCritical() << __FUNCTION__ << "   line:" << __LINE__ << " srcImage is null";
 		return false;
 	}
-	ImgS.push_back(std::move(image));
 	return true;
 }
 
@@ -415,30 +449,22 @@ void Hd_CameraModule_HIK3::registerCallBackFun(PBGLOBAL_CALLBACK_FUN func, QObje
 	TempPack.callbackparent = parent;
 	TempPack.cameraIndex = getString;
 	TempPack.GetimagescallbackFunc = func;
-	m_sdkFunc->CallbackFuncVec.append(TempPack);
-	qDebug() << getString;
+	m_sdkFunc->CallbackFuncMap.insert(getString.toInt(), TempPack);
+	qDebug() << m_sdkFunc << "registerCallBackFun" << getString;
 }
 
 void Hd_CameraModule_HIK3::cancelCallBackFun(PBGLOBAL_CALLBACK_FUN callBackFun, QObject* parent, const QString& getString)
 {
 	int index = getString.toInt();
-	if (callBackFun == m_sdkFunc->CallbackFuncVec.at(index).GetimagescallbackFunc)
+	if (m_sdkFunc->CallbackFuncMap.keys().contains(index))
 	{
-		qDebug() << index;
-		m_sdkFunc->CallbackFuncVec.removeAt(index);
-	}
-	else
-	{
-		int size = m_sdkFunc->CallbackFuncVec.size();
-		for (int i = 0; i < size; i++)
+		if (callBackFun == m_sdkFunc->CallbackFuncMap.value(index).GetimagescallbackFunc)
+			m_sdkFunc->CallbackFuncMap.remove(index);
+		else
 		{
-			if (m_sdkFunc->CallbackFuncVec.at(i).GetimagescallbackFunc == callBackFun)
-			{
-				m_sdkFunc->CallbackFuncVec.removeAt(i);
-				qDebug() << i;
-				return;
-			}
+			qCritical() << "key of Values != Input Callbackfun" << getString;
 		}
+		qDebug() << "cancelCallBackFun" << getString;
 	}
 	return;
 }
@@ -447,8 +473,9 @@ bool create(const QString& DeviceSn, const QString& name, const QString& path)
 {
 	if (DeviceSn.isEmpty() || name.isEmpty() || path.isEmpty())
 		return false;
+	if (TotalMap.keys().contains(name.split(':').first())) return true;
 	OnePb temp;
-	temp.base = new Hd_CameraModule_HIK3(DeviceSn, path+"/Hd_CameraModule_HIK3/"  );
+	temp.base = new Hd_CameraModule_HIK3(DeviceSn, path + "/Hd_CameraModule_HIK3/");
 	if (!temp.base->init())
 		return false;
 	temp.baseWidget = new mPrivateWidget(temp.base);
@@ -569,13 +596,35 @@ mPrivateWidget::mPrivateWidget(void* handle)
 
 void mPrivateWidget::InitWidget()
 {
-	QVBoxLayout* MainLayout = new QVBoxLayout(this);
+	QHBoxLayout* mainHboxLayout = new QHBoxLayout(this);
+	QVBoxLayout* MainLayout = new QVBoxLayout;
 
 	SetDataBtn = new QPushButton(this);
+	SetDataBtn->setText(tr("软触发"));
+	OpenGrapMat = new QPushButton(this);
+	OpenGrapMat->setText(tr("允许取图"));
+	NotGrapMat = new QPushButton(this);
+	NotGrapMat->setText(tr("禁止取图"));
 	m_showimage = new ImageViewer(this);
+	//qDebug() << m_Camerahandle->GetRootPath() + "/" + m_Camerahandle->GetSn() + ".json";
+	m_AlgParmWidget = new AlgParmWidget(m_Camerahandle->GetRootPath() + "/" + m_Camerahandle->GetSn() + ".json");
+	connect(m_AlgParmWidget, &AlgParmWidget::SengCurrentByte, this, [=](QByteArray byte) {
+
+		QJsonObject paramObj = QJsonDocument::fromJson(byte).object();
+		QMap<QString, QString> ParameterMap;
+		for (auto objStr : paramObj.keys())
+		{
+			ParameterMap.insert(objStr, paramObj.value(objStr).toString());
+		}
+		m_Camerahandle->setParameter(ParameterMap);
+
+		});
 	MainLayout->addWidget(m_showimage);
 	MainLayout->addWidget(SetDataBtn);
-
+	MainLayout->addWidget(OpenGrapMat);
+	MainLayout->addWidget(NotGrapMat);
+	connect(OpenGrapMat, &QPushButton::clicked, this, [=]() {emit m_Camerahandle->trigged(1000); });
+	connect(NotGrapMat, &QPushButton::clicked, this, [=]() {emit m_Camerahandle->trigged(1001); });
 	connect(SetDataBtn, &QPushButton::clicked, this, [=]() {
 		std::vector<cv::Mat> mats;  QStringList list;
 		emit m_Camerahandle->trigged(1000);
@@ -584,8 +633,6 @@ void mPrivateWidget::InitWidget()
 		cv::Mat tempMat = mats.at(0);
 		m_showimage->loadImage(QPixmap::fromImage(cvMatToQImage(tempMat)));
 		});
-	connect(m_Camerahandle, &Hd_CameraModule_HIK3::sendMats, this, [=](cv::Mat getMat) {
-
-		m_showimage->loadImage(QPixmap::fromImage(cvMatToQImage(getMat)));
-		});
+	mainHboxLayout->addLayout(MainLayout, 4);
+	mainHboxLayout->addWidget(m_AlgParmWidget, 3);
 }
