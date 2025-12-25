@@ -43,13 +43,13 @@ find_package(Qt5 COMPONENTS ${qtlist} REQUIRED )
 foreach(item ${qtlist})
     list(APPEND lib_list Qt5::${item})
 endforeach()
-
+LIST(APPEND ENV_INCLUDE ${CMAKE_GLOBAL_INCLUDE_DIRECTORY})
 
 FILE(GLOB HEAD_FILES "./*.h" )
 FILE(GLOB SRC_FILES "./*.cpp")
 FILE(GLOB UI_FILES "./*.ui")
 
-INCLUDE_DIRECTORIES(${CMAEK_CURRENT_BINARY_DIR})
+INCLUDE_DIRECTORIES(${CMAEK_CURRENT_BINARY_DIR}${ENV_INCLUDE})
 
 add_compile_options("$<$<C_COMPILER_ID:MSVC>:/utf-8>")
 add_compile_options("$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
