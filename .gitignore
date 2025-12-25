@@ -64,6 +64,9 @@ compile_commands.json
 *.manifest
 *.generated
 
+*.zip
+*.7z
+*.tar.gz
 
 
 env/

@@ -2,13 +2,11 @@
 #define Hd_CameraModule_HIK3_H
 
 #include <QtCore/qglobal.h>
-
-#include<opencv2/opencv.hpp>
 #include <MvCameraControl.h>
 #include <opencv.hpp>
 #include <QByteArray>
 #include <QDebug>
-#include<iostream>
+#include <iostream>
 #include <Windows.h>
 #include <time.h>
 #include <QThread>
@@ -61,6 +59,9 @@ public:
     int Currentindex = 0;
     string Username;
     string SnCode;
+	std::map<int, float> exposureTimeMap;
+	std::map<int, float> gainMap;
+	std::map<int, float> gammaMap;
 	QString RootPath;
 	QMap<QString, QString> ParasValueMap;
     int getImageMaxCoiunts = 1;//一次信号取图次数
@@ -69,6 +70,8 @@ public:
     MV_CAM_TRIGGER_SOURCE m_MV_CAM_TRIGGER_SOURCE;//触发方式
 signals:
 	void trigged(int);
+private:
+	void InitExposure_Gain_GamaMap();
 
 };
 class  Hd_CameraModule_HIK3 :public PbGlobalObject
@@ -100,10 +103,7 @@ public:
     QMap<QString, QString> ParasValueMap;
 signals:
     void sendMats(cv::Mat);
-
 };
-
-
 extern "C"
 {
     Q_DECL_EXPORT bool create(const QString& DeviceSn, const QString& name, const QString& path);

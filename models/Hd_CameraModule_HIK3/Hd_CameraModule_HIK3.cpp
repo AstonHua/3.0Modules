@@ -111,7 +111,7 @@ bool IsColor(MvGvspPixelType enType);
 int SearchDevice()
 {
 	memset(&m_stDevList, 0, sizeof(MV_CC_DEVICE_INFO_LIST));
-	// ch:枚举子网内所有设备 | en:Enumerate all devices within subnet
+	// ch:枚举子网内所有设备 | en:Enumerate all devices within subnetgit
 	int nRet = MV_CC_EnumDevices(MV_GIGE_DEVICE || MV_USB_DEVICE, &m_stDevList);
 	if (MV_OK != nRet)
 	{
@@ -207,7 +207,7 @@ void __stdcall ImageCallBackEx(unsigned char* pData0, MV_FRAME_OUT_INFO_EX* pFra
 	cv::Mat srcImage = cv::Mat();
 	std::vector<cv::Mat> OutMats;
 	CameraFunSDKfactoryCls* CurrentCamera = (CameraFunSDKfactoryCls*)(pUser0);
-	qDebug()<< CurrentCamera << pUser0;
+	qDebug() << CurrentCamera << pUser0;
 	if (pFrameInfo0)
 	{
 		//获取的是单通道灰度图
@@ -298,6 +298,18 @@ void __stdcall ImageCallBackEx(unsigned char* pData0, MV_FRAME_OUT_INFO_EX* pFra
 		}
 	}
 	CurrentCamera->Currentindex++;
+	if (CurrentCamera->exposureTimeMap.count(CurrentCamera->Currentindex) == 1)
+	{
+		MV_CC_SetFloatValue(CurrentCamera->handle, "ExposureTime", CurrentCamera->exposureTimeMap[CurrentCamera->Currentindex]);
+	}
+	if(CurrentCamera->gainMap.count(CurrentCamera->Currentindex) == 1)
+	{
+		MV_CC_SetFloatValue(CurrentCamera->handle, "Gain", CurrentCamera->gainMap[CurrentCamera->Currentindex]);
+	}
+	if(CurrentCamera->gammaMap.count(CurrentCamera->Currentindex) == 1)
+	{
+		MV_CC_SetFloatValue(CurrentCamera->handle, "Gamma", CurrentCamera->gammaMap[CurrentCamera->Currentindex]);
+	}
 	if (CurrentCamera->Currentindex >= CurrentCamera->getImageMaxCoiunts / CurrentCamera->OnceGetImageNum)	CurrentCamera->Currentindex = 0;
 
 	pData0 = { 0 };
@@ -316,9 +328,7 @@ CameraFunSDKfactoryCls::~CameraFunSDKfactoryCls()
 
 bool CameraFunSDKfactoryCls::initSdk(QMap<QString, QString>& insideValuesMaps)
 {
-	/*getImageMaxCoiunts = insideValuesMaps.value("OnceSignalsGetImageCoutns").toInt();
-	OnceGetImageNum = insideValuesMaps.value("OnceImageCounts").toInt();
-	timeOut = insideValuesMaps.value("GetOnceImageTimes").toInt();*/
+
 	if (!connctDevice(SnCode, getHandle(), this))
 	{
 		emit trigged(1);
@@ -341,7 +351,51 @@ void CameraFunSDKfactoryCls::upDateParam()
 	OnceGetImageNum = ParasValueMap.value("OnceImageCounts").toInt();
 	timeOut = ParasValueMap.value("GetOnceImageTimes").toInt();
 	qDebug() << getImageMaxCoiunts << OnceGetImageNum;
+	InitExposure_Gain_GamaMap();
 	return;
+}
+void CameraFunSDKfactoryCls::InitExposure_Gain_GamaMap()
+{
+	//曝光时间
+	exposureTimeMap.clear();
+	gainMap.clear();
+	gammaMap.clear();
+	QString exposureTimesStr = QString(ParasValueMap.value("ExposureTimeMap"));
+	QString gainStr = QString(ParasValueMap.value("GainMap"));
+	QString gammaStr = QString(ParasValueMap.value("GammaMap"));
+	QStringList exposureTimesList = exposureTimesStr.split(",", QString::SkipEmptyParts);
+	QStringList gainList = gainStr.split(",", QString::SkipEmptyParts);
+	QStringList gammaList = gammaStr.split(",", QString::SkipEmptyParts);
+	for (const QString& item : exposureTimesList)
+	{
+		QStringList pair = item.split(":", QString::SkipEmptyParts);
+		if (pair.size() == 2)
+		{
+			int index = pair[0].toInt();
+			float value = pair[1].toFloat();
+			exposureTimeMap[index] = value;
+		}
+	}
+	for (const QString& item : gainList)
+	{
+		QStringList pair = item.split(":", QString::SkipEmptyParts);
+		if (pair.size() == 2)
+		{
+			int index = pair[0].toInt();
+			float value = pair[1].toFloat();
+			gainMap[index] = value;
+		}
+	}
+	for (const QString& item : gammaList)
+	{
+		QStringList pair = item.split(":", QString::SkipEmptyParts);
+		if (pair.size() == 2)
+		{
+			int index = pair[0].toInt();
+			float value = pair[1].toFloat();
+			gammaMap[index] = value;
+		}
+	}
 }
 //类创建
 Hd_CameraModule_HIK3::Hd_CameraModule_HIK3(QString sn, QString path, int settype, QObject* parent)
