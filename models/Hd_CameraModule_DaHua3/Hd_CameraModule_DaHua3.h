@@ -3,9 +3,7 @@
 
 #include <QtCore/qglobal.h>
 
-#include<opencv2/opencv.hpp>
 #include <QByteArray>
-#include <QDebug>
 #include <iostream>
 #include <Windows.h>
 #include <QDateTime>

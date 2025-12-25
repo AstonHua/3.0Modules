@@ -11,22 +11,6 @@ struct OnePb
 };
 QMap<QString, OnePb>  TotalMap;
 IMV_DeviceList m_stDevList;
-QString byteArrayToUnicode(const QByteArray array) {
-
-	// state用于保存转换状态，它的成员invalidChars，可用来判断是否转换成功
-	// 如果转换成功，则值为0，如果值大于0，则说明转换失败
-	QTextCodec::ConverterState state;
-	// 先尝试使用utf-8的方式把QByteArray转换成QString
-	QString text = QTextCodec::codecForName("UTF-8")->toUnicode(array.constData(), array.size(), &state);
-	// 如果转换时无效字符数量大于0，说明编码格式不对
-	if (state.invalidChars > 0)
-	{
-		// 再尝试使用GBK的方式进行转换，一般就能转换正确(当然也可能是其它格式，但比较少见了)
-		text = QTextCodec::codecForName("GBK")->toUnicode(array);
-	}
-	return text;
-}
-
 static void onDeviceLinkNotify(const IMV_SConnectArg* pConnectArg, void* pUser);
 
 //设置曝光

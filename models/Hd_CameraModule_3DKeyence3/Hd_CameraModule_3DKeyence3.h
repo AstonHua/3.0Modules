@@ -8,21 +8,11 @@
 #include <iostream>
 #include <Windows.h>
 #include "pbglobalobject.h"
-#include "QQueue.h"
 #include "QMap.h"
-#include "QDir.h"
-#include "qapplication.h"
-#include "qjsonobject.h"
-#include "qjsonarray.h"
-#include "qjsondocument.h"
-#include "QLibrary.h"
-#include <qmutex.h>
 #include "LJX8_IF.h"
 #include "LJX8_ErrorCode.h"
 #include "ThreadSafeQueue.h"
 #include <struct.h>
-#include <imageView.h>
-//#include <MyTableWidget.h>
 #include <AlgParm.h>
 const int MAX_LJXA_DEVICENUM = 6;
 //#pragma comment(lib, "winmm.lib")
