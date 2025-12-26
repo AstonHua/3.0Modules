@@ -79,14 +79,14 @@ QVector<QPair<QString, QString>>TotalSnIpVec;
 const int MAX_LJXA_XDATANUM = 3200;
 const unsigned int BUFFER_FULL_COUNT = 30000;
 
-int _imageAvailable[MAX_LJXA_DEVICENUM] = { 0 };
+//int _imageAvailable[MAX_LJXA_DEVICENUM] = { 0 };
 //unsigned short* _luminanceBuf[MAX_LJXA_DEVICENUM] = { 0 };
 //unsigned short* _heightBuf[MAX_LJXA_DEVICENUM] = { 0 };
 LJX8IF_HIGH_SPEED_PRE_START_REQ* startReq_ptr[MAX_LJXA_DEVICENUM];// = nullptr;
 LJX8IF_PROFILE_INFO* profileInfo_ptr[MAX_LJXA_DEVICENUM];// = nullptr;
 CameraFunSDKfactoryCls* SDKFunc[MAX_LJXA_DEVICENUM];
-int _lastImageSizeHeight[MAX_LJXA_DEVICENUM];
-int _highSpeedPortNo[MAX_LJXA_DEVICENUM];
+//int _lastImageSizeHeight[MAX_LJXA_DEVICENUM];
+//int _highSpeedPortNo[MAX_LJXA_DEVICENUM];
 LJX8IF_ETHERNET_CONFIG _ethernetConfig[MAX_LJXA_DEVICENUM];
 LJXA_ACQ_GETPARAM _getParam[MAX_LJXA_DEVICENUM];
 //注册回调 string对应自身的参数协议 （自定义）
@@ -165,23 +165,6 @@ CameraFunSDKfactoryCls::~CameraFunSDKfactoryCls()
 bool CameraFunSDKfactoryCls::initSdk(QMap<QString, QString>& insideValuesMaps)
 {
 
-	/*timeout_ms = insideValuesMaps.value("GetOnceImageTimes").toInt();
-	QStringList IpList = insideValuesMaps.value("Ip").split('.');
-	if (IpList.size() != 4)
-		return false;
-	EthernetConfig.abyIpAddress[0] = IpList.at(0).toInt();
-	EthernetConfig.abyIpAddress[1] = IpList.at(1).toInt();
-	EthernetConfig.abyIpAddress[2] = IpList.at(2).toInt();
-	EthernetConfig.abyIpAddress[3] = IpList.at(3).toInt();
-	EthernetConfig.wPortNo = insideValuesMaps.value("Port").toInt();
-	xImageSize = insideValuesMaps.value("xImageSize").toInt();
-	yImageSize = insideValuesMaps.value("yImageSize").toInt();
-	y_pitch_um = insideValuesMaps.value("y_pitch_um").toFloat();
-	deviceId = insideValuesMaps.value("DeviceId").toInt();
-	use_external_batchStart = insideValuesMaps.value("use_external_batchStart").toInt();
-	getImageMaxCoiunts = insideValuesMaps.value("OnceSignalsGetImageCounts").toInt();
-	OnceGetImageNum = insideValuesMaps.value("OnceImageCounts").toInt();*/
-
 	startReq_ptr[deviceId] = new LJX8IF_HIGH_SPEED_PRE_START_REQ;
 	profileInfo_ptr[deviceId] = new LJX8IF_PROFILE_INFO;
 	startReq_ptr[deviceId]->bySendPosition = 2;
@@ -194,34 +177,13 @@ bool CameraFunSDKfactoryCls::initSdk(QMap<QString, QString>& insideValuesMaps)
 	setParam_Ptr->timeout_ms = timeout_ms;
 	setParam_Ptr->use_external_batchStart = use_external_batchStart;
 
-	// Allocate user memory
-	//heightImage = (unsigned short*)malloc(sizeof(unsigned short) * xImageSize * yImageSize);
-	//luminanceImage = (unsigned short*)malloc(sizeof(unsigned short) * xImageSize * yImageSize);
-
 	errCode = LJXA_ACQ_OpenDevice(deviceId, &EthernetConfig, HighSpeedPortNo);
 	if (errCode != LJX8IF_RC_OK)
 	{
 		qDebug() << __FUNCTION__ << " line:" << __LINE__ << " Failed to open device ";
-		//Free user memory		
 		return false;
 	}
-	//char pControllerSerialNo [20] ; char pHeadSerialNo[20];
-	//LJX8IF_GetSerialNumber(deviceId, pControllerSerialNo, pHeadSerialNo);
-	//qDebug() << pControllerSerialNo << pHeadSerialNo;
 	isopen = true;
-
-	// Allocate memory
-	/*_heightBuf[deviceId] = (unsigned short*)malloc(yImageSize * MAX_LJXA_XDATANUM * 2);
-	if (_heightBuf[deviceId] == NULL)
-	{
-		return LJX8IF_RC_ERR_NOMEMORY;
-	}
-
-	_luminanceBuf[deviceId] = (unsigned short*)malloc(yImageSize * MAX_LJXA_XDATANUM * 2);
-	if (_luminanceBuf[deviceId] == NULL)
-	{
-		return LJX8IF_RC_ERR_NOMEMORY;
-	}*/
 
 	// Initialize
 	if (!InitHighSpeed())
@@ -243,7 +205,7 @@ void myCallbackFunc(LJX8IF_PROFILE_HEADER* pProfileHeaderArray, WORD* pHeightPro
 		qDebug() << __FUNCTION__ << " line:" << __LINE__ << "dwNotify = " << dwNotify;
 		if ((dwNotify != 0) || (dwNotify & 0x10000) != 0) return;
 		if (dwCount == 0) return;
-		if (_imageAvailable[dwUser] == 1) return;
+		//if (_imageAvailable[dwUser] == 1) return;//全局容器拿图直接发送，不用判断是否正在处理图像，优化逻辑
 		// _heightBuf 代表的含义:程序里的高度缓存区，pHeightProfileArray 回调函数里的数据 
 		// 此处崩溃的可能性：xImageSize 配置文件中设置的值和3D相机调试软件设置的值不一致，会崩溃。
 		unsigned short* heightBuf = (unsigned short*)malloc(dwProfileDataCount * dwCount * 2);
@@ -258,9 +220,6 @@ void myCallbackFunc(LJX8IF_PROFILE_HEADER* pProfileHeaderArray, WORD* pHeightPro
 			return;
 		}
 
-		//qDebug() << __FUNCTION__ << " line:" << __LINE__ << "heightBuf " << heightBuf;
-		//qDebug() << __FUNCTION__ << " line:" << __LINE__ << "pHeightProfileArray: " << pHeightProfileArray;
-
 		//判断内存是否重叠
 		if (heightBuf <= pHeightProfileArray || (unsigned short*)heightBuf >= (WORD*)pHeightProfileArray + dwProfileDataCount * dwCount * 2)
 		{
@@ -268,7 +227,7 @@ void myCallbackFunc(LJX8IF_PROFILE_HEADER* pProfileHeaderArray, WORD* pHeightPro
 		}
 		else
 		{
-			qDebug() << __FUNCTION__ << " line:" << __LINE__ << "first memcpy _heightBuf error";
+			qCritical() << __FUNCTION__ << " line:" << __LINE__ << "first memcpy _heightBuf error";
 			if (heightBuf != NULL)
 			{
 				free(heightBuf);
@@ -281,22 +240,20 @@ void myCallbackFunc(LJX8IF_PROFILE_HEADER* pProfileHeaderArray, WORD* pHeightPro
 
 		}
 		unsigned short* luminanceBuf = (unsigned short*)malloc(dwProfileDataCount * dwCount * 2);
-		//qDebug() << __FUNCTION__ << " line:" << __LINE__ << "_luminanceBuf[dwUser]: " << luminanceBuf;
-		//qDebug() << __FUNCTION__ << " line:" << __LINE__ << "pLuminanceProfileArray: " << pLuminanceProfileArray;
 		if (dwLuminanceEnable == 1)
 		{
 			if (luminanceBuf == NULL)
 			{
-				qDebug() << __FUNCTION__ << " line:" << __LINE__ << "_luminanceBuf[dwUser]== NULL";
+				qCritical() << __FUNCTION__ << " line:" << __LINE__ << "_luminanceBuf[dwUser]== NULL";
 				return;
 			}
 			if (luminanceBuf <= pLuminanceProfileArray || (unsigned short*)luminanceBuf >= (WORD*)pLuminanceProfileArray + dwProfileDataCount * dwCount * 2)
 				memcpy(luminanceBuf, pLuminanceProfileArray, dwProfileDataCount * dwCount * 2);
 			else
-				qDebug() << __FUNCTION__ << " line:" << __LINE__ << "memcpy _luminanceBuf error";
+				qCritical() << __FUNCTION__ << " line:" << __LINE__ << "memcpy _luminanceBuf error";
 		}
 		// 扫描的行数，  dwCount 和 yImageSize 一致
-		CameraFunSDKfactoryCls* tempsdk = SDKFunc[dwUser];
+		CameraFunSDKfactoryCls* tempsdk = SDKFunc[dwUser];//替换成实际操作类指针，无需_imageAvailable[dwUser]判断
 		//if (tempsdk->allowflag.load(std::memory_order::memory_order_acquire))
 		{
 			int xDatasize = profileInfo_ptr[dwUser]->wProfileDataCount;
@@ -322,7 +279,6 @@ void myCallbackFunc(LJX8IF_PROFILE_HEADER* pProfileHeaderArray, WORD* pHeightPro
 				Getimagevector.clear();
 				realIndex++;
 				Getimagevector.push_back(heightMat.clone());
-				//cv::imwrite("D:/callback/" + QDateTime::currentDateTime().toString("yyyyMMddhhmmsszzz").toStdString() + ".tiff", heightMat);
 				if (tempsdk->CallbackFuncMap.keys().contains(realIndex))
 				{
 					qDebug() << "Mat Type" << "heightMat" << "out Mat callback" << tempsdk->CallbackFuncMap.keys() << realIndex << tempsdk->getImageMaxCoiunts;
@@ -347,28 +303,6 @@ void myCallbackFunc(LJX8IF_PROFILE_HEADER* pProfileHeaderArray, WORD* pHeightPro
 				}
 
 			}
-			/*	if (tempsdk->use_external_batchStart > 0)
-				{
-					if (tempsdk->CallbackFuncMap.size() > tempsdk->Currentindex)
-					{
-						qDebug() << "out Mat callback" << tempsdk->CallbackFuncMap.size() << tempsdk->Currentindex<< tempsdk->getImageMaxCoiunts;
-						QObject* obj = tempsdk->CallbackFuncMap.value(tempsdk->Currentindex).callbackparent;
-						obj->setProperty("cameraIndex", QString::number(tempsdk->Currentindex));
-						qDebug() << "Mat size" << Getimagevector.size();
-						for (const auto& mat : Getimagevector)
-						{
-							qDebug() << mat.cols << mat.rows;
-						}
-						tempsdk->CallbackFuncMap.value(tempsdk->Currentindex).GetimagescallbackFunc(obj, Getimagevector);
-					}
-
-				}
-				else
-				{
-					if (tempsdk->allowflag.load(std::memory_order::memory_order_acquire))
-						tempsdk->ImageMats.push(Getimagevector);
-				}*/
-
 			tempsdk->Currentindex++;
 			if (tempsdk->Currentindex >= tempsdk->getImageMaxCoiunts / tempsdk->OnceGetImageNum)	tempsdk->Currentindex = 0;
 			qDebug() << __FUNCTION__ << " line:" << __LINE__ << " success to acquire 3d image! camera_name: " << dwUser << tempsdk->Currentindex;
@@ -386,7 +320,7 @@ void myCallbackFunc(LJX8IF_PROFILE_HEADER* pProfileHeaderArray, WORD* pHeightPro
 			heightBuf = NULL;
 		}
 		//_imageAvailable[dwUser] = 1;                 // 图像获取成功  dwUser  和 deviceId   一致
-		_lastImageSizeHeight[dwUser] = dwCount;
+		//_lastImageSizeHeight[dwUser] = dwCount;
 	}
 	catch (std::exception e)
 	{

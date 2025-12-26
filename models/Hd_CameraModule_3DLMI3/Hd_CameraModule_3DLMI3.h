@@ -8,7 +8,9 @@
 #include "QMap.h"
 #include "QLibrary.h"
 #include <ThreadSafeQueue.h>
+#include <AlgParm.h>
 #include <struct.h>
+#include <QFuture>
 #pragma comment(lib, "winmm.lib")
 #pragma comment(lib,"GoSdk.lib")
 #pragma comment(lib,"kApi.lib")
@@ -30,7 +32,7 @@ enum LmiStatus
 #define INVALID_RANGE_16BIT     ((signed short)0x8000)          // gocator transmits range data as 16-bit signed integers. 0x8000 signifies invalid range data.
 #define DOUBLE_MAX              ((k64f)1.7976931348623157e+308) // 64-bit double - largest positive value.
 #define INVALID_RANGE_DOUBLE    ((k64f)-DOUBLE_MAX)             // floating point value to represent invalid range data.
-
+const int MAX_LJXA_DEVICENUM = 20;
 using DataContext = k32u ;
 
 struct CallbackFuncPack
@@ -48,8 +50,8 @@ public:
     kAssembly getkAssembly() { return api; }
     GoSystem getsystem1() { return system1; }
     ~GoSystemOnceExplem() {
-        if (api)delete api;
-        if (system1)delete system1;
+        if (api) GoDestroy( api);
+        if (system1) GoDestroy (system1);
     };
 private:
     explicit GoSystemOnceExplem(QObject* parent = nullptr) {
@@ -102,18 +104,26 @@ public:
     GoDataSet dataset = kNULL;
     DataContext* contextPointer = new DataContext();
     LmiStatus m_status = UnInit;
-    QVector<CallbackFuncPack> CallbackFuncVec;
+    QMap<int, CallbackFuncPack> CallbackFuncMap;
+    //QVector<CallbackFuncPack> CallbackFuncVec;
     ThreadSafeQueue<vector<cv::Mat>> ImageMats;//图像缓存队列
-
+    int getImageMaxCoiunts = 1;//一次信号取图次数
+    int OnceGetImageNum = 1;//一次趣图出图数量
+    int timeOut = 1000;
     int  triggedType = 0;
     bool CameraStatus = true;
-    bool statusRunning = true;
+    std::atomic<bool> isInited = false;     // SDK初始化成功标志
+    QMutex sdkMutex; // 保护 SDK 句柄操作的互斥锁
+    std::atomic<bool> statusRunning = true; // 原子标志位，确保线程可见性
+    QFuture<void> StateResult;
+    std::atomic<bool> isDestroying = false; // 标记是否正在销毁（避免线程继续访问）
+    std::atomic<bool> isRunning = false;    // 新增/确认该成员存在
 signals:
     void trigged(int);
 public:
 
 private://内部参数通过接口设置
-
+    void threadCheckState();
 };
 
 class Hd_CameraModule_3DLMI3 :public PbGlobalObject
@@ -140,9 +150,13 @@ public:
     bool data(std::vector<cv::Mat>&, QStringList&);
     //注册回调 string对应自身的参数协议 （自定义）
     void registerCallBackFun(PBGLOBAL_CALLBACK_FUN, QObject*, const QString&);
-
+    //注销回调 string对应自身的参数协议 （自定义）--->注销后还得取消连接状态
+    void cancelCallBackFun(PBGLOBAL_CALLBACK_FUN, QObject*, const QString&);
+    QString GetRootPath() const { return JsonFile; }
+    QString GetSn() const { return SnName; }
     bool  checkStatus();
-    void threadCheckState(); //线程检查相机状态
+    bool closeCamera();
+    //void threadCheckState(); //线程检查相机状态
     CameraFunSDKfactoryCls* m_sdkFunc;
     QMap<QString, QString> ParasValueMap;
 private:
@@ -158,5 +172,22 @@ extern "C"
     Q_DECL_EXPORT PbGlobalObject* getCameraPtr(const QString& name);
     Q_DECL_EXPORT QStringList getCameraSnList();
 }
+class mPrivateWidget :public QWidget
+{
+    Q_OBJECT;
+public:
+    mPrivateWidget(void*);
+    ~mPrivateWidget() {
+        
+    };
+    void InitWidget();
+    QPushButton* SetDataBtn;
+    QPushButton* OpenGrapMat;
+    QPushButton* NotGrapMat;
+    ImageViewer* m_showimage;
+    //MyTableWidget* m_paramsTable;
+    AlgParmWidget* m_AlgParmWidget;
+    Hd_CameraModule_3DLMI3* m_Camerahandle = nullptr;
 
+};
 #endif // HD_3DCAMERALMI_MODULE_H

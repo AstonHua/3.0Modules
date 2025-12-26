@@ -1,4 +1,4 @@
-#ifndef Hd_CameraModule_HIK3_H
+﻿#ifndef Hd_CameraModule_HIK3_H
 #define Hd_CameraModule_HIK3_H
 
 #include <QtCore/qglobal.h>

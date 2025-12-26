@@ -1,4 +1,4 @@
-#ifndef Hd_CameraModule_3DKeyence_H
+﻿#ifndef Hd_CameraModule_3DKeyence_H
 #define Hd_CameraModule_3DKeyence_H
 #pragma execution_character_set("utf-8")
 
@@ -75,10 +75,6 @@ public:
     int	timeout_ms = 0;		 // Timeout value for the acquiring image (in milisecond).
     int use_external_batchStart = 1; // Set "1" if you controll the batch start timing externally. (e.g. terminal input) 0内部触发，1外部触发
     unsigned short zUnit = 0;
-
-    //unsigned short* heightImage = nullptr;		    // Height image
-    //unsigned short* luminanceImage = nullptr;		// Luminance image
-
     LJXA_ACQ_SETPARAM* setParam_Ptr = nullptr;
     LJXA_ACQ_GETPARAM* getParam_Ptr = nullptr;
     int HighSpeedPortNo = 24692;		            // Port number for high-speed communication
@@ -147,7 +143,6 @@ public:
     QPushButton* OpenGrapMat;
     QPushButton* NotGrapMat;
     ImageViewer* m_showimage;
-    //MyTableWidget* m_paramsTable;
     AlgParmWidget* m_AlgParmWidget;
     Hd_CameraModule_3DKeyence3* m_Camerahandle = nullptr;
 
