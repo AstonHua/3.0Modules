@@ -1,14 +1,16 @@
 ﻿#pragma once
+#ifndef AlgParm_H
+#define AlgParm_H
+#include <QGroupBox>
 #include "qjsonmodel.h"
 #include <QWidget>
 #include <qlayout.h>
 #include <qtreeview.h>
 #include <qfile.h>
 #include <qtoolbutton.h>
-#include <qmessagebox.h>
 #include <qtextedit.h>
 #include <qtexttable.h>
-#include < QLineEdit>
+#include <QLineEdit>
 #include <QMessageBox>
 #include <QScrollBar>
 #include <qsplitter.h>
@@ -70,16 +72,20 @@ class AlgParmWidget : public QWidget
 signals:
 	void SengCurrentByte(QByteArray);
 public:
-	//bool eventFilter(QObject* watched, QEvent* event);
-	AlgParmWidget(QString currentFilePath);
+	AlgParmWidget(std::shared_ptr<QByteArray>,QString currentFilePath);
+	AlgParmWidget( QString currentFilePath);
 	~AlgParmWidget ();
 	inline void SetFilePath(const QString& path) { currentFilePath = path; }
+	void reLoadByte(QByteArray);
 private:
+	void init(QByteArray);
 	QString currentFilePath;
 	QByteArray treeViewByte;
 	QByteArray TextByte;
 	QMessageBox tmpbox;
 	modelTreeView * m_modelTreeView = nullptr;
 	TextEditSelf* m_TextEdit = nullptr;
+	std::shared_ptr<QByteArray>	QByteArrayPtr;
 };
 
+#endif // !AlgParm_H

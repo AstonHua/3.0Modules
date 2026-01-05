@@ -186,6 +186,11 @@ void __stdcall ImageCallBackEx(unsigned char* pData0, MV_FRAME_OUT_INFO_EX* pFra
 		}
 
 	}
+	if (CurrentCamera->triggerMode.load(std::memory_order::memory_order_acquire) == 0)
+	{
+		CurrentCamera->triggerOffBack(srcImage);
+		return;
+	}
 	//if (CurrentCamera->allowflag.load(std::memory_order::memory_order_acquire))
 	{
 		OutMats.push_back(srcImage.clone());
@@ -215,11 +220,11 @@ void __stdcall ImageCallBackEx(unsigned char* pData0, MV_FRAME_OUT_INFO_EX* pFra
 	{
 		MV_CC_SetFloatValue(CurrentCamera->handle, "ExposureTime", CurrentCamera->exposureTimeMap[CurrentCamera->Currentindex]);
 	}
-	if(CurrentCamera->gainMap.count(CurrentCamera->Currentindex) == 1)
+	if (CurrentCamera->gainMap.count(CurrentCamera->Currentindex) == 1)
 	{
 		MV_CC_SetFloatValue(CurrentCamera->handle, "Gain", CurrentCamera->gainMap[CurrentCamera->Currentindex]);
 	}
-	if(CurrentCamera->gammaMap.count(CurrentCamera->Currentindex) == 1)
+	if (CurrentCamera->gammaMap.count(CurrentCamera->Currentindex) == 1)
 	{
 		MV_CC_SetFloatValue(CurrentCamera->handle, "Gamma", CurrentCamera->gammaMap[CurrentCamera->Currentindex]);
 	}
@@ -264,51 +269,53 @@ void CameraFunSDKfactoryCls::upDateParam()
 	OnceGetImageNum = ParasValueMap.value("OnceImageCounts").toInt();
 	timeOut = ParasValueMap.value("GetOnceImageTimes").toInt();
 	qDebug() << getImageMaxCoiunts << OnceGetImageNum;
-	InitExposure_Gain_GamaMap();
 	return;
 }
-void CameraFunSDKfactoryCls::InitExposure_Gain_GamaMap()
+bool CameraFunSDKfactoryCls::setArrayByte(QString Key, QJsonArray array)
 {
-	//曝光时间
-	exposureTimeMap.clear();
-	gainMap.clear();
-	gammaMap.clear();
-	QString exposureTimesStr = QString(ParasValueMap.value("ExposureTimeMap"));
-	QString gainStr = QString(ParasValueMap.value("GainMap"));
-	QString gammaStr = QString(ParasValueMap.value("GammaMap"));
-	QStringList exposureTimesList = exposureTimesStr.split(",", QString::SkipEmptyParts);
-	QStringList gainList = gainStr.split(",", QString::SkipEmptyParts);
-	QStringList gammaList = gammaStr.split(",", QString::SkipEmptyParts);
-	for (const QString& item : exposureTimesList)
+	if (Key == "ExposureTime")
 	{
-		QStringList pair = item.split(":", QString::SkipEmptyParts);
-		if (pair.size() == 2)
+		exposureTimeMap.clear();
+		for (auto &str : array)
 		{
-			int index = pair[0].toInt();
-			float value = pair[1].toFloat();
-			exposureTimeMap[index] = value;
+			QStringList pair = str.toString().split(",", QString::SkipEmptyParts);
+			if (pair.size() == 2)
+			{
+				int index = pair[0].toInt();
+				float value = pair[1].toFloat();
+				exposureTimeMap[index] = value;
+			}
 		}
 	}
-	for (const QString& item : gainList)
+	else if (Key == "Gain")
 	{
-		QStringList pair = item.split(":", QString::SkipEmptyParts);
-		if (pair.size() == 2)
+		gainMap.clear();
+		for (auto& str : array)
 		{
-			int index = pair[0].toInt();
-			float value = pair[1].toFloat();
-			gainMap[index] = value;
+			QStringList pair = str.toString().split(",", QString::SkipEmptyParts);
+			if (pair.size() == 2)
+			{
+				int index = pair[0].toInt();
+				float value = pair[1].toFloat();
+				gainMap[index] = value;
+			}
 		}
 	}
-	for (const QString& item : gammaList)
+	else if (Key == "Gamma")
 	{
-		QStringList pair = item.split(":", QString::SkipEmptyParts);
-		if (pair.size() == 2)
+		gammaMap.clear();
+		for (auto& str : array)
 		{
-			int index = pair[0].toInt();
-			float value = pair[1].toFloat();
-			gammaMap[index] = value;
+			QStringList pair = str.toString().split(",", QString::SkipEmptyParts);
+			if (pair.size() == 2)
+			{
+				int index = pair[0].toInt();
+				float value = pair[1].toFloat();
+				gammaMap[index] = value;
+			}
 		}
 	}
+	return true;
 }
 //类创建
 Hd_CameraModule_HIK3::Hd_CameraModule_HIK3(QString sn, QString path, int settype, QObject* parent)
@@ -321,7 +328,10 @@ Hd_CameraModule_HIK3::Hd_CameraModule_HIK3(QString sn, QString path, int settype
 	"GetOnceImageTimes": "1000",
 	"LastUpdateTime": "",
 	"OnceImageCounts":"1",
-	"OnceSignalsGetImageCounts":"20"})");
+	"OnceSignalsGetImageCounts":"20",
+	"ExposureTime":[],
+	"Gain":[],
+	"Gamma":[]})");
 
 	if (!QFile(JsonFilePath).exists())
 		createAndWritefile(JsonFilePath, FirstCreateByte.toUtf8());
@@ -371,6 +381,15 @@ bool Hd_CameraModule_HIK3::init()
 		else if (Code == 1001)
 		{
 			m_sdkFunc->allowflag.store(false, std::memory_order::memory_order_release);
+		}
+		else if (Code == 1)
+		{
+			m_sdkFunc->triggerMode.store(1, std::memory_order::memory_order_release);
+
+		}
+		else if (Code == 0)
+		{
+			m_sdkFunc->triggerMode.store(0, std::memory_order::memory_order_release);
 		}
 		});
 	setParameter(ParasValueMap);
@@ -543,21 +562,172 @@ mPrivateWidget::mPrivateWidget(void* handle)
 {
 	m_Camerahandle = reinterpret_cast<Hd_CameraModule_HIK3*>(handle);
 	InitWidget();
+	connect(this, &mPrivateWidget::sendImage,this, [=](QImage img) {	
+		m_showimage->reciveImage("", img); }
+	, Qt::QueuedConnection);
 }
 
 void mPrivateWidget::InitWidget()
 {
 	QHBoxLayout* mainHboxLayout = new QHBoxLayout(this);
 	QVBoxLayout* MainLayout = new QVBoxLayout;
+	QGridLayout* girlayout = new QGridLayout();
+	{
+		QLabel* triggerModel = new QLabel(this);
+		triggerModel->setText(tr("触发模式:"));
+		QLabel* triggerSoure = new QLabel(this);
+		triggerSoure->setText(tr("触发源:"));
 
+		QComboBox* first = new QComboBox(this);
+		first->addItems(QStringList() << "打开" << "关闭");
+		connect(first, &QComboBox::currentTextChanged, this, [=](QString text) {
+			if (text == "打开")
+			{
+				MV_CC_SetEnumValue(m_Camerahandle->m_sdkFunc->handle, "TriggerMode", MV_TRIGGER_MODE_ON);
+				emit m_Camerahandle->trigged(1);
+			}
+			else
+			{
+				MV_CC_SetEnumValue(m_Camerahandle->m_sdkFunc->handle, "TriggerMode", MV_TRIGGER_MODE_OFF);
+				emit m_Camerahandle->trigged(0);
+			}
+			});
+		QComboBox* Second = new QComboBox(this);
+		Second->addItems(QStringList() << "Line0" << "Line1" << "Line2" << "Line3" << "软触发");
+		connect(Second, &QComboBox::currentTextChanged, this, [=](QString text) {
+			if (text == "Line0")
+			{
+				MV_CC_SetEnumValue(m_Camerahandle->m_sdkFunc->handle, "TriggerSource", MV_TRIGGER_SOURCE_LINE0);
+			}
+			else if (text == "Line1")
+			{
+				MV_CC_SetEnumValue(m_Camerahandle->m_sdkFunc->handle, "TriggerSource", MV_TRIGGER_SOURCE_LINE1);
+			}
+			else if (text == "Line2")
+			{
+				MV_CC_SetEnumValue(m_Camerahandle->m_sdkFunc->handle, "TriggerSource", MV_TRIGGER_SOURCE_LINE2);
+			}
+			else if (text == "Line3")
+			{
+				MV_CC_SetEnumValue(m_Camerahandle->m_sdkFunc->handle, "TriggerSource", MV_TRIGGER_SOURCE_LINE3);
+			}
+			else if (text == "软触发")
+			{
+				MV_CC_SetEnumValue(m_Camerahandle->m_sdkFunc->handle, "TriggerSource", MV_TRIGGER_SOURCE_SOFTWARE);
+			}
+			});
+
+		//ui->lineEdit->setValidator(doubleValidator);
+		QLineEdit* gain = new QLineEdit();
+		QLineEdit* Gama = new QLineEdit();
+		QLineEdit* Exposure = new QLineEdit();
+
+		QDoubleValidator* doubleValidator1 = new QDoubleValidator(0.00, 10000000.0, 4, this);
+		doubleValidator1->setNotation(QDoubleValidator::StandardNotation);
+		MVCC_FLOATVALUE stFloatValue = { 0 };
+		MV_CC_GetFloatValue(m_Camerahandle->m_sdkFunc->handle, "ExposureTime", &stFloatValue);
+		Exposure->setText(QString::number(stFloatValue.fCurValue, 'f', 4));
+		doubleValidator1->setBottom(stFloatValue.fMin);
+		doubleValidator1->setTop(stFloatValue.fMax);
+		Exposure->setValidator(doubleValidator1);
+
+		QDoubleValidator* doubleValidator2 = new QDoubleValidator(0.00, 10000000.0, 4, this);
+		doubleValidator2->setNotation(QDoubleValidator::StandardNotation);
+		MV_CC_GetFloatValue(m_Camerahandle->m_sdkFunc->handle, "Gain", &stFloatValue);
+		gain->setText(QString::number(stFloatValue.fCurValue, 'f', 4));
+		doubleValidator2->setBottom(stFloatValue.fMin);
+		doubleValidator2->setTop(stFloatValue.fMax);
+		gain->setValidator(doubleValidator2);
+
+		QDoubleValidator* doubleValidator3 = new QDoubleValidator(0.00, 10000000.0, 4, this);
+		doubleValidator3->setNotation(QDoubleValidator::StandardNotation);
+		MV_CC_GetFloatValue(m_Camerahandle->m_sdkFunc->handle, "Gamma", &stFloatValue);
+		Gama->setText(QString::number(stFloatValue.fCurValue, 'f', 4));
+		doubleValidator3->setBottom(stFloatValue.fMin);
+		doubleValidator3->setTop(stFloatValue.fMax);
+		Gama->setValidator(doubleValidator3);
+		connect(gain, &QLineEdit::editingFinished, this, [=]() {
+			MV_CC_SetFloatValue(m_Camerahandle->m_sdkFunc->handle, "Gain", float(gain->text().toFloat()));
+			});
+		connect(Gama, &QLineEdit::editingFinished, this, [=]() {
+			MV_CC_SetFloatValue(m_Camerahandle->m_sdkFunc->handle, "Gamma", float(Gama->text().toFloat()));
+			});
+		connect(Exposure, &QLineEdit::editingFinished, this, [=]() {
+			MV_CC_SetFloatValue(m_Camerahandle->m_sdkFunc->handle, "ExposureTime", float(Exposure->text().toFloat()));
+
+			});
+		QLabel* GainL = new QLabel();
+		QLabel* GamaL = new QLabel();
+		QLabel* ExposureL = new QLabel();
+		GainL->setText(tr("增益(db)"));
+		GamaL->setText(tr("伽马校正"));
+		ExposureL->setText(tr("曝光时间(us)"));
+		girlayout->addWidget(triggerModel, 0, 0);
+		girlayout->addWidget(first, 0, 1);
+		girlayout->addWidget(triggerSoure, 1, 0);
+		girlayout->addWidget(Second, 1, 1);
+		girlayout->addWidget(GainL, 2, 0);
+		girlayout->addWidget(gain, 2, 1);
+		girlayout->addWidget(GamaL, 3, 0);
+		girlayout->addWidget(Gama, 3, 1);
+		girlayout->addWidget(ExposureL, 4, 0);
+		girlayout->addWidget(Exposure, 4, 1);
+	}
+	{
+
+
+
+	}
+	girlayout->setAlignment(Qt::AlignTop);
+	QGroupBox* groupBox = new QGroupBox(this);
+	groupBox->setTitle(tr("相机参数设置"));
+	groupBox->setLayout(girlayout);
+	QVBoxLayout* AlgParmLayout = new QVBoxLayout();
+	AlgParmLayout->addWidget(groupBox);
+	{
+		QFile file(m_Camerahandle->GetRootPath() + "/" + m_Camerahandle->GetSn() + ".json");
+		file.open(QIODevice::ReadOnly);
+		QByteArray byte = file.readAll();
+		file.close();
+		QStackedWidget* changeWidget = new QStackedWidget(this);
+		QComboBox* comboBox = new QComboBox(this);
+		comboBox->addItems(QStringList() << tr("增益(db)") << tr("伽马校正") << tr("曝光时间(us)"));
+		QGroupBox* groupBoxliuc = new QGroupBox(this);
+		groupBoxliuc->setTitle(tr("流程参数设置"));
+
+		QVBoxLayout* vLayout = new QVBoxLayout();
+		vLayout->addWidget(comboBox);
+		vLayout->addWidget(changeWidget);
+		groupBoxliuc->setLayout(vLayout);
+		AlgParmLayout->addWidget(groupBoxliuc);
+
+		BytePtr  = QJsonDocument::fromJson(byte).object();
+
+		MyTableWidget* gainTable = new MyTableWidget(this, BytePtr.value("Gain").toArray());
+		gainTable->setProperty("Name", "Gain");
+		MyTableWidget* GamaTable = new MyTableWidget(this, BytePtr.value("Gamma").toArray());
+		GamaTable->setProperty("Name", "Gama");
+		MyTableWidget* ExposureTimeTable = new MyTableWidget(this, BytePtr.value("ExposureTime").toArray());
+		ExposureTimeTable->setProperty("Name", "ExposureTime");
+		changeWidget->addWidget(gainTable);
+		changeWidget->addWidget(GamaTable);
+		changeWidget->addWidget(ExposureTimeTable);
+		connect(gainTable, &MyTableWidget::SendCurrentResult, this, &mPrivateWidget::getRes);
+		connect(GamaTable, &MyTableWidget::SendCurrentResult, this, &mPrivateWidget::getRes);
+		connect(ExposureTimeTable, &MyTableWidget::SendCurrentResult, this, &mPrivateWidget::getRes);
+		QObject::connect(comboBox, &QComboBox::currentTextChanged, this, [=](QString index) {
+			changeWidget->setCurrentIndex(comboBox->currentIndex());
+
+			});
+	}
 	SetDataBtn = new QPushButton(this);
 	SetDataBtn->setText(tr("软触发"));
 	OpenGrapMat = new QPushButton(this);
 	OpenGrapMat->setText(tr("允许取图"));
 	NotGrapMat = new QPushButton(this);
 	NotGrapMat->setText(tr("禁止取图"));
-	m_showimage = new ImageViewer(this);
-	//qDebug() << m_Camerahandle->GetRootPath() + "/" + m_Camerahandle->GetSn() + ".json";
+	m_showimage = new viewWidget();
+	m_showimage->setMinimumSize(500, 500);
 	m_AlgParmWidget = new AlgParmWidget(m_Camerahandle->GetRootPath() + "/" + m_Camerahandle->GetSn() + ".json");
 	connect(m_AlgParmWidget, &AlgParmWidget::SengCurrentByte, this, [=](QByteArray byte) {
 
@@ -565,7 +735,16 @@ void mPrivateWidget::InitWidget()
 		QMap<QString, QString> ParameterMap;
 		for (auto objStr : paramObj.keys())
 		{
-			ParameterMap.insert(objStr, paramObj.value(objStr).toString());
+			if(paramObj.value(objStr).isString())
+				ParameterMap.insert(objStr, paramObj.value(objStr).toString());
+			else if(paramObj.value(objStr).isArray())
+			{
+				m_Camerahandle->m_sdkFunc->setArrayByte(objStr, paramObj.value(objStr).toArray());
+			}
+			else if (paramObj.value(objStr).isObject())
+			{
+
+			}
 		}
 		m_Camerahandle->setParameter(ParameterMap);
 
@@ -574,6 +753,9 @@ void mPrivateWidget::InitWidget()
 	MainLayout->addWidget(SetDataBtn);
 	MainLayout->addWidget(OpenGrapMat);
 	MainLayout->addWidget(NotGrapMat);
+	auto func = std::bind(&mPrivateWidget::showImage, this, std::placeholders::_1);
+
+	m_Camerahandle->m_sdkFunc->registerGetImageFun(func);
 	connect(OpenGrapMat, &QPushButton::clicked, this, [=]() {emit m_Camerahandle->trigged(1000); });
 	connect(NotGrapMat, &QPushButton::clicked, this, [=]() {emit m_Camerahandle->trigged(1001); });
 	connect(SetDataBtn, &QPushButton::clicked, this, [=]() {
@@ -582,8 +764,37 @@ void mPrivateWidget::InitWidget()
 		m_Camerahandle->setData(mats, list);
 		m_Camerahandle->data(mats, list);
 		cv::Mat tempMat = mats.at(0);
-		m_showimage->loadImage(QPixmap::fromImage(cvMatToQImage(tempMat)));
+		m_showimage->reciveImage("", cvMatToQImage(tempMat));
 		});
-	mainHboxLayout->addLayout(MainLayout, 4);
-	mainHboxLayout->addWidget(m_AlgParmWidget, 3);
+	mainHboxLayout->addLayout(MainLayout);
+	mainHboxLayout->addLayout(AlgParmLayout);
+	mainHboxLayout->addWidget(m_AlgParmWidget);
+
+}
+
+void mPrivateWidget::getRes(QByteArray byte)
+{
+	MyTableWidget* button = qobject_cast<MyTableWidget*>(sender());
+	QString type = button->property("Name").toString();
+	if (type == "Gain")
+	{
+		BytePtr.insert("Gain", QJsonDocument::fromJson(byte).array());
+	}
+	else if (type == "ExposureTime")
+	{
+		BytePtr.insert("ExposureTime", QJsonDocument::fromJson(byte).array());
+	}
+	else if (type == "Gamma")
+	{
+		BytePtr.insert("Gamma", QJsonDocument::fromJson(byte).array());
+	}
+
+	m_AlgParmWidget->reLoadByte(QJsonDocument(BytePtr).toJson());
+}
+
+void mPrivateWidget::showImage(cv::Mat& image)
+{
+
+	emit sendImage(cvMatToQImage(image));
+	//m_showimage->reciveImage("", cvMatToQImage(image.clone()));
 }

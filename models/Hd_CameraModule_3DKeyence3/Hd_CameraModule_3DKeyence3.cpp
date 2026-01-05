@@ -35,8 +35,8 @@ QStringList getConnectedDevicesFromARP() {
 		QString ip = match.captured(1);
 		//qDebug() << ip;
 		// 排除本机IP和广播地址
-		if (!ip.endsWith(".255") && !ip.endsWith(".0") 
-			 && ip.split('.').at(0) == "192"
+		if (!ip.endsWith(".255") && !ip.endsWith(".0")
+			&& ip.split('.').at(0) == "192"
 			&& ip.split('.').at(1) == "168")//基恩士默认第三位是0配置ip时设置静态ip第三位为0
 		{
 			devices << ip;
@@ -257,58 +257,66 @@ void myCallbackFunc(LJX8IF_PROFILE_HEADER* pProfileHeaderArray, WORD* pHeightPro
 		//if (tempsdk->allowflag.load(std::memory_order::memory_order_acquire))
 		{
 			int xDatasize = profileInfo_ptr[dwUser]->wProfileDataCount;
-
-			cv::Mat luminanceMat = cv::Mat(tempsdk->yImageSize, xDatasize, CV_16UC1, luminanceBuf);
-			cv::normalize(luminanceMat, luminanceMat, 0, 255, cv::NORM_MINMAX);
-			cv::convertScaleAbs(luminanceMat, luminanceMat);
 			cv::Mat heightMat = cv::Mat(tempsdk->yImageSize, xDatasize, CV_16UC1, heightBuf);
 			if (tempsdk->use_external_batchStart > 0)
 			{
-				vector<cv::Mat> Getimagevector;
+				vector<cv::Mat> GetimageVector;
 				int realIndex = tempsdk->Currentindex * tempsdk->OnceGetImageNum;
-				qDebug() << "callback index" << realIndex;
-				Getimagevector.push_back(luminanceMat.clone());
-				if (tempsdk->CallbackFuncMap.keys().contains(realIndex))
+				if (dwLuminanceEnable == 1)//需要判断是否开启亮度图输出
 				{
-					qDebug() << "Mat Type" << "luminanceMat" << "out Mat callback" << tempsdk->CallbackFuncMap.keys() << realIndex << tempsdk->getImageMaxCoiunts;
-					QObject* obj = tempsdk->CallbackFuncMap.value(realIndex).callbackparent;
-					obj->setProperty("cameraIndex", QString::number(realIndex));
+					cv::Mat luminanceMat = cv::Mat(tempsdk->yImageSize, xDatasize, CV_16UC1, luminanceBuf);
+					cv::normalize(luminanceMat, luminanceMat, 0, 255, cv::NORM_MINMAX);
+					cv::convertScaleAbs(luminanceMat, luminanceMat);
+					GetimageVector.push_back(luminanceMat.clone());
+					if (tempsdk->CallbackFuncMap.keys().contains(realIndex))
+					{
+						qDebug() << "Mat Type" << "luminanceMat" << "out Mat callback" << tempsdk->CallbackFuncMap.keys() << realIndex << tempsdk->getImageMaxCoiunts;
+						QObject* obj = tempsdk->CallbackFuncMap.value(realIndex).callbackparent;
+						obj->setProperty("cameraIndex", QString::number(realIndex));
 
-					tempsdk->CallbackFuncMap.value(tempsdk->Currentindex).GetimagescallbackFunc(obj, Getimagevector);
+						tempsdk->CallbackFuncMap.value(tempsdk->Currentindex).GetimagescallbackFunc(obj, GetimageVector);
+					}
+					realIndex++;
 				}
-				Getimagevector.clear();
-				realIndex++;
-				Getimagevector.push_back(heightMat.clone());
+				qDebug() << "callback index" << realIndex;
+				GetimageVector.clear();
+
+				GetimageVector.push_back(heightMat.clone());
 				if (tempsdk->CallbackFuncMap.keys().contains(realIndex))
 				{
 					qDebug() << "Mat Type" << "heightMat" << "out Mat callback" << tempsdk->CallbackFuncMap.keys() << realIndex << tempsdk->getImageMaxCoiunts;
 					QObject* obj = tempsdk->CallbackFuncMap.value(realIndex).callbackparent;
 					obj->setProperty("cameraIndex", QString::number(realIndex));
-					tempsdk->CallbackFuncMap.value(tempsdk->Currentindex).GetimagescallbackFunc(obj, Getimagevector);
+					tempsdk->CallbackFuncMap.value(tempsdk->Currentindex).GetimagescallbackFunc(obj, GetimageVector);
 				}
 			}
 			else
 			{
-				if (tempsdk->allowflag.load(std::memory_order::memory_order_acquire))//软触发插入两次需要调两次data接口
+				if (tempsdk->allowflag.load(std::memory_order::memory_order_acquire))
 				{
-					vector<cv::Mat> Getimagevector;
-					Getimagevector.push_back(luminanceMat.clone());
-					Getimagevector.push_back(heightMat.clone());
-					tempsdk->ImageMats.push(Getimagevector);
+					vector<cv::Mat> GetimageVector;
+					if (dwLuminanceEnable == 1)//需要判断是否开启亮度图输出
+					{
+						cv::Mat luminanceMat = cv::Mat(tempsdk->yImageSize, xDatasize, CV_16UC1, luminanceBuf);
+						cv::normalize(luminanceMat, luminanceMat, 0, 255, cv::NORM_MINMAX);
+						cv::convertScaleAbs(luminanceMat, luminanceMat);
+						GetimageVector.push_back(luminanceMat.clone());
+					}
+					GetimageVector.push_back(heightMat.clone());
+					tempsdk->ImageMats.push(GetimageVector);
 				}
 				else
 				{
 					qDebug() << __FUNCTION__ << " line:" << __LINE__ << "allowflag is false" << "Not Allow to getimage";
 
 				}
-
 			}
-			tempsdk->Currentindex++;
+			tempsdk->Currentindex++;//回调次数
 			if (tempsdk->Currentindex >= tempsdk->getImageMaxCoiunts / tempsdk->OnceGetImageNum)	tempsdk->Currentindex = 0;
 			qDebug() << __FUNCTION__ << " line:" << __LINE__ << " success to acquire 3d image! camera_name: " << dwUser << tempsdk->Currentindex;
 
 		}
-		
+
 		if (luminanceBuf)
 		{
 			free(luminanceBuf);
@@ -328,12 +336,12 @@ void myCallbackFunc(LJX8IF_PROFILE_HEADER* pProfileHeaderArray, WORD* pHeightPro
 	}
 }
 
-int CameraFunSDKfactoryCls::LJXA_ACQ_OpenDevice(int lDeviceId, LJX8IF_ETHERNET_CONFIG* EthernetConfig, int HighSpeedPortNo)
+int CameraFunSDKfactoryCls::LJXA_ACQ_OpenDevice(int lDeviceId, LJX8IF_ETHERNET_CONFIG* EthernetConfig, int _HighSpeedPortNo)
 {
 	int errCode = LJX8IF_EthernetOpen(lDeviceId, EthernetConfig);
 
 	_ethernetConfig[lDeviceId] = *EthernetConfig;
-	HighSpeedPortNo = HighSpeedPortNo;
+	HighSpeedPortNo = _HighSpeedPortNo;
 
 	qDebug() << __FUNCTION__ << " line:" << __LINE__ << "  Open device ! errCode:" << errCode;
 	return errCode;
@@ -496,7 +504,7 @@ bool CameraFunSDKfactoryCls::InitHighSpeed()
 		}
 		errCode = LJX8IF_InitializeHighSpeedDataCommunicationSimpleArray(deviceId, &_ethernetConfig[deviceId], HighSpeedPortNo, &myCallbackFunc, yImageSize, deviceId); // 初始化高速通讯
 		//qDebug() << __FUNCTION__ << " line:" << __LINE__ << "   errCode:" << errCode;
-		errCode = LJX8IF_PreStartHighSpeedDataCommunication(deviceId, startReq_ptr[deviceId], profileInfo_ptr[deviceId]);              // 预开始启动高速通信，作用 做预连接
+		errCode = LJX8IF_PreStartHighSpeedDataCommunication(deviceId, startReq_ptr[deviceId], profileInfo_ptr[deviceId]);// 预开始启动高速通信，作用 做预连接
 		//qDebug() << __FUNCTION__ << " line:" << __LINE__ << "   errCode:" << errCode;
 
 		// zUnit

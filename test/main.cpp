@@ -1,3 +1,4 @@
+#pragma once
 #include <qlibrary.h>
 #include <pbglobalobject.h>
 #include <QApplication>
@@ -8,42 +9,13 @@
 #include <QFile>
 #include <Windows.h>
 #include <QDir>
+#include <AlgParm.h>
 using CreateFuncPtr = bool (*)(const QString&, const QString&, const QString&);
 using destroyFuncPtr = void (*)(const QString& name);
 using getCameraWidgetPtr =QWidget* (*)(const QString& name);
 using getCameraPtr = PbGlobalObject* (*)(const QString& name);
 using getCameraSnListPtr = QStringList(*)();
 //QStringList getCameraSnList();
-bool createAndWritefile(const QString& filename, const QByteArray& writeByte)
-{
-	QString path = filename;
-	path = path.mid(0, path.lastIndexOf("/"));
-	QDir dir;
-	dir.mkpath(path);
-	QFile file(filename);
-	if (file.exists())
-	{
-		if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Append)) {
-			qWarning() << "错误,无法创建文件" << filename << file.errorString();
-			return false;
-		}
-	}
-	else
-	{
-		if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
-			qWarning() << "错误,无法创建文件" << filename << file.errorString();
-			return false;
-		}
-	}
-	QTextStream out(&file);
-	out.setCodec("utf-8");
-	//for (auto str : inputData)
-	{
-		out << writeByte;
-	}
-	file.close();
-	return true;
-}
 bool loadDLLWithWindowsAPI() {
 	// 将DLL路径转换为宽字符串
 	LPCSTR dllPath = ".\\Hd_CameraModule_DaHua3.dll";
@@ -77,8 +49,10 @@ int main(int argc, char* argv[])
 {
 	QApplication a(argc, argv);
 
-	createAndWritefile("./测试/测试.josn", "{\n\"测试\":\"测试内容\"\n}");
-#if 0
+	//createAndWritefile("./测试/测试.josn", "{\n\"测试\":\"测试内容\"\n}");
+
+	//QWidget* widget = new AlgParmWidget("./config/demo.json");
+#if 1
 
 
 
@@ -131,9 +105,10 @@ int main(int argc, char* argv[])
 	}
 
 
+
+#endif // 0
 	QMainWindow w;
 	w.setCentralWidget(centerwidget);
 	w.show();
-#endif // 0
 	return a.exec();
 }

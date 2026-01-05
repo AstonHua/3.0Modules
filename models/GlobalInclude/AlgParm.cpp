@@ -1,4 +1,11 @@
 ﻿#include "AlgParm.h"
+
+AlgParmWidget::AlgParmWidget(std::shared_ptr<QByteArray> ptrObj, QString currentFilePath)
+	:QByteArrayPtr(ptrObj),currentFilePath(currentFilePath)
+{
+	init(*ptrObj.get());
+}
+
 AlgParmWidget::AlgParmWidget(QString Path):currentFilePath(Path)
 {
 
@@ -6,6 +13,22 @@ AlgParmWidget::AlgParmWidget(QString Path):currentFilePath(Path)
 	file.open(QIODevice::ReadOnly);
 	QByteArray byte = file.readAll();
 	file.close();
+	init(byte);
+}
+
+AlgParmWidget::~AlgParmWidget()
+{
+
+}
+
+void AlgParmWidget::reLoadByte(QByteArray byte)
+{
+	m_modelTreeView->loadJson(byte);
+	m_TextEdit->setJsonByte(byte);
+}
+
+void AlgParmWidget::init(QByteArray byte)
+{
 	m_modelTreeView = new modelTreeView;
 	m_modelTreeView->loadJson(byte);
 	m_TextEdit = new TextEditSelf;
@@ -96,7 +119,7 @@ AlgParmWidget::AlgParmWidget(QString Path):currentFilePath(Path)
 				JsonFile.close();
 				emit SengCurrentByte(writeArray);
 				QMessageBox::information(this, tr("提示"), tr("保存成功"));
-				
+
 				return;
 			}
 			else if (res == QMessageBox::Cancel)
@@ -115,9 +138,6 @@ AlgParmWidget::AlgParmWidget(QString Path):currentFilePath(Path)
 	this->setLayout(topVBboxLayout);
 }
 
-AlgParmWidget::~AlgParmWidget()
-{
-}
 void TextEditSelf::highlightText(const QString& textToHighlight) {
 	QTextDocument* document = textEdit->document();
 	QTextCharFormat format;
@@ -139,11 +159,13 @@ void TextEditSelf::highlightText(const QString& textToHighlight) {
 		}
 	}
 }
+
 QString TextEditSelf::text() const
 {
 	return textEdit->toPlainText();
 
 }
+
 TextEditSelf::TextEditSelf()
 {
 

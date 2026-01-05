@@ -158,4 +158,4 @@ extern "C"
     //Q_DECL_EXPORT void destory(Hd_25DCameraVJ_module * ptr);
 }
 
-#endif // HD_MVCAMERA_MODULE_H
+#endif // Hd_CameraModule_3DKeyence_H

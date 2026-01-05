@@ -24,6 +24,7 @@ struct CallbackFuncPack
 };
 class CameraFunSDKfactoryCls : public QObject
 {
+    typedef std::function<void(cv::Mat&)> GetImageFun;
     Q_OBJECT
 public:
     explicit CameraFunSDKfactoryCls(QString Sn, QString path ,QObject* parent = nullptr)
@@ -32,6 +33,7 @@ public:
     bool initSdk(QMap<QString, QString>& insideValuesMaps);
 	void* getHandle() { return handle; }
 	void upDateParam();
+    bool setArrayByte(QString Key, QJsonArray);
     void* handle = nullptr;//相机句柄
     ThreadSafeQueue<std::vector<cv::Mat>> MatQueue;
     QMap<int,CallbackFuncPack> CallbackFuncMap;
@@ -48,14 +50,16 @@ public:
     int OnceGetImageNum = 1;//一次取图出图数量
     int timeOut = 1000;
     MV_CAM_TRIGGER_SOURCE m_MV_CAM_TRIGGER_SOURCE;//触发方式
+    std::atomic_int triggerMode = 0;//触发模式 0关闭 1打开
+    void registerGetImageFun(GetImageFun fun) { triggerOffBack = fun; }
+    GetImageFun triggerOffBack;
 signals:
 	void trigged(int);
-private:
-	void InitExposure_Gain_GamaMap();
 
 };
 class  Hd_CameraModule_HIK3 :public PbGlobalObject
 {
+
     Q_OBJECT
 public:
     //1、创建：赋值给famliy
@@ -73,7 +77,6 @@ public:
     void registerCallBackFun(PBGLOBAL_CALLBACK_FUN, QObject*, const QString&);
     //注销回调 string对应自身的参数协议 （自定义）--->注销后还得取消连接状态
     void cancelCallBackFun(PBGLOBAL_CALLBACK_FUN, QObject*, const QString&);
-
     QString GetRootPath() const { return RootPath; }
     QString GetSn() const { return Sncode; }
     QString Sncode;
@@ -81,6 +84,7 @@ public:
 	QString JsonFilePath;
     CameraFunSDKfactoryCls* m_sdkFunc =nullptr;
     QMap<QString, QString> ParasValueMap;
+
 signals:
     void sendMats(cv::Mat);
 };
@@ -105,10 +109,19 @@ public:
     QPushButton* SetDataBtn;
     QPushButton* OpenGrapMat;
     QPushButton* NotGrapMat;
-    ImageViewer* m_showimage;
+    viewWidget* m_showimage;
     //MyTableWidget* m_paramsTable;
     AlgParmWidget* m_AlgParmWidget;
 	Hd_CameraModule_HIK3* m_Camerahandle = nullptr;
 
+    void getRes(QByteArray);
+private:
+	void showImage(cv::Mat& image);
+    QGridLayout* layout = nullptr;
+	QJsonObject BytePtr;
+
+
+signals:
+    void sendImage(QImage);
 };
 #endif // Hd_CameraModule_HIK3_H
