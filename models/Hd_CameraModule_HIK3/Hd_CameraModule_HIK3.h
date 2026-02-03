@@ -13,6 +13,7 @@
 #include <ThreadSafeQueue.h>
 #include <struct.h>
 #include <AlgParm.h>
+#include <dmessagebox.h>
 using namespace cv;
 using namespace std;
 #pragma execution_character_set("utf-8")
@@ -50,7 +51,8 @@ public:
     int OnceGetImageNum = 1;//一次取图出图数量
     int timeOut = 1000;
     MV_CAM_TRIGGER_SOURCE m_MV_CAM_TRIGGER_SOURCE;//触发方式
-    std::atomic_int triggerMode = 0;//触发模式 0关闭 1打开
+    // std::atomic_int triggerMode = 0;//触发模式 0关闭 1打开
+    std::atomic_int triggerMode{0};//触发模式 0关闭 1打开
     void registerGetImageFun(GetImageFun fun) { triggerOffBack = fun; }
     GetImageFun triggerOffBack;
 signals:
@@ -106,19 +108,54 @@ public:
     mPrivateWidget(void*);
     ~mPrivateWidget() {};
     void InitWidget();
-    QPushButton* SetDataBtn;
-    QPushButton* OpenGrapMat;
-    QPushButton* NotGrapMat;
-    viewWidget* m_showimage;
-    //MyTableWidget* m_paramsTable;
-    AlgParmWidget* m_AlgParmWidget;
 	Hd_CameraModule_HIK3* m_Camerahandle = nullptr;
-
     void getRes(QByteArray);
+
 private:
+    void createConnect();
 	void showImage(cv::Mat& image);
     QGridLayout* layout = nullptr;
-	QJsonObject BytePtr;
+    QJsonObject BytePtr;
+
+    QPushButton* SetDataBtn     = nullptr;
+    QPushButton* ContinuesBtn   = nullptr;
+    QPushButton* Details        = nullptr;
+
+    QComboBox* first            = nullptr; //触发模式
+    QComboBox* Second           = nullptr;//触发源
+    QComboBox* BalanceWhiteAuto = nullptr;//自动白平衡开关
+    QSpinBox * BalanceRatioR     = nullptr;
+    QSpinBox * BalanceRatioG     = nullptr;
+    QSpinBox * BalanceRatioB     = nullptr;
+    QComboBox* GamaDisable      = nullptr;
+    QSpinBox * Count            = nullptr;//一次信号取图次数
+    QSpinBox * timeout          = nullptr;//单张图超时时间
+    viewWidget* m_showimage     = nullptr;
+    QLineEdit* gain             = nullptr;
+    QLineEdit* Gama             = nullptr;
+    QLineEdit* Exposure         = nullptr;
+    QPushButton*saveBtn         = nullptr;
+
+    MyTableWidget* gainTable = nullptr;
+    MyTableWidget* GamaTable = nullptr;
+    MyTableWidget* ExposureTimeTable = nullptr;
+
+    QPushButton *Add            = nullptr;
+    QPushButton *Delete         = nullptr;
+    QPushButton *takeEffect     = nullptr;
+    QTableWidget * showTable    = nullptr;
+    AlgParmWidget* m_AlgParmWidget= nullptr;
+
+    QDoubleValidator* doubleValidator1 = nullptr;
+    QDoubleValidator* doubleValidator2 = nullptr;
+    QDoubleValidator* doubleValidator3 = nullptr;
+
+    float gainMin,gainMax;
+    float ExposureMin,ExposureMax;
+    float GamaMin,GamaMax;
+
+    QMap<QPair<int, int>, QString> cellOriginalValues;
+    QList<int> BalanceRatioLst = {100,200,300};
 
 
 signals:

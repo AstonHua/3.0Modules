@@ -177,6 +177,8 @@ if(ON)
                 elseif(${child} MATCHES "dahua")
                     SET( ${child}_target_link 
                         "MVSDKmd" )
+                elseif(${child} MATCHES "DMessageBox")
+                        SET( ${child}_target_link "DMessageBox")
                 endif()
                 message(${child}_target_link: ${${child}_target_link})
             endforeach()

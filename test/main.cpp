@@ -49,8 +49,6 @@ int main(int argc, char* argv[])
 {
 	QApplication a(argc, argv);
 
-	//createAndWritefile("./测试/测试.josn", "{\n\"测试\":\"测试内容\"\n}");
-
 	//QWidget* widget = new AlgParmWidget("./config/demo.json");
 #if 1
 

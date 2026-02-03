@@ -197,7 +197,7 @@ viewWidget::viewWidget(viewWidget* copy)
 	view_ptr->scene()->addItem(mainitem);
 	view_ptr->centerOn(mainitem);
 	view_ptr->fitInView(mainitem, Qt::KeepAspectRatio);
-	labptr->setText(copy->getName());
+    labptr->setText(copy->getName());
 	NGCounts = copy->NGCounts;
 	defcetMap = copy->defcetMap;
 }
@@ -217,14 +217,13 @@ void viewWidget::init()
 	setAttribute(Qt::WA_Hover, true);
 	installEventFilter(this);
 	setMouseTracking(true); // 启用鼠标跟踪
-	QString  m_style = "QLabel{background-color:rgb(211,211,211);color:rgb(50,50,50);border-top-left-radius:8px;border-top-right-radius:8px}";
+    //QString  m_style = "QLabel{background-color:rgb(211,211,211);color:rgb(50,50,50);border-top-left-radius:8px;border-top-right-radius:8px}";
 	// 图像
 	mainitem = new QGraphicsPixmapItem;
 	mainitem->setFlags(QGraphicsItem::ItemIsMovable | QGraphicsItem::ItemContainsChildrenInShape);
 	QLabel* m_lab = new QLabel;
-	m_lab->setStyleSheet(m_style);
-	m_lab->setFixedHeight(20);
-
+    //m_lab->setStyleSheet(m_style);
+    m_lab->setFixedHeight(5);
 	labptr.reset(m_lab);
 
 	// 显示窗口
@@ -243,8 +242,6 @@ void viewWidget::init()
 	delete this->layout();
 	this->setLayout(vBox);
 	//centerImageInView(view_ptr.get(), mainitem);
-
-
 }
 
 void viewWidget::resizeEvent(QResizeEvent* event)

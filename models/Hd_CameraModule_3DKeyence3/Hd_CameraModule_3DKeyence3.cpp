@@ -649,8 +649,6 @@ QStringList getCameraSnList()
 			index++;
 			qDebug() << __FUNCTION__ << " line:" << __LINE__ << "  Open device ! errCode:" << errCode;
 		}
-
-
 	}
 	for (int o = 0; o < resVec.size(); o++)
 	{

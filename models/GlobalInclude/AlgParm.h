@@ -71,6 +71,7 @@ class AlgParmWidget : public QWidget
 	Q_OBJECT;
 signals:
 	void SengCurrentByte(QByteArray);
+    void save();
 public:
 	AlgParmWidget(std::shared_ptr<QByteArray>,QString currentFilePath);
 	AlgParmWidget( QString currentFilePath);

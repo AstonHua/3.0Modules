@@ -40,10 +40,29 @@ public:
 		//    "outline: none;"           // 去除虚线框（关键属性）
 		//    "}"
 		//);
-		InitFormulaWidget();
-		loadCsvToTable();
+
+        InitFormulaWidget();
+        //loadCsvToTable();
 		formulaTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
 	}
+    void initData(){loadCsvToTable();}
+    QToolButton* getAddRowButton() const { return AddRow; }
+    QToolButton* getTakeEffectButton() const { return SaveBtn; }
+    int removeTableRow(int row)
+    {
+        if (!formulaTable) return 0;
+        int totalRows = formulaTable->rowCount();
+        int lastDataRow = totalRows - 2;
+        if (row < 0 || row > lastDataRow)
+            return 0;
+        formulaTable->removeRow(row);
+        return 1;
+    }
+    void setItemData(int row,int col,QString text)
+    {
+        QTableWidgetItem* newItem = new QTableWidgetItem(text);
+        formulaTable->setItem(row, col, newItem);
+    }
 	QByteArray GetCurrentByte()
 	{
 		QJsonArray OutArray;
@@ -113,7 +132,8 @@ protected:
 		}
 	}
 
-
+signals:
+    void addNewLine(int row ,int col,QString value);
 private:
 	void ClearTableData()
 	{
@@ -135,6 +155,7 @@ private:
 			for (auto str : obj.toString().split(','))
 			{
 				formulaTable->setItem(row, index, new QTableWidgetItem(str));
+                addNewLine(row,index,str);
 				index++;
 			}
 			row++;

@@ -75,6 +75,10 @@ void AlgParmWidget::init(QByteArray byte)
 		//	emit m_modelTreeView->jsonchange(treebyte);
 		//}
 		});
+    connect(this,&AlgParmWidget::save,this, [=](){
+        saveButton->click();
+    });
+
 	connect(saveButton, &QToolButton::clicked, this, [=]()
 		{
 
