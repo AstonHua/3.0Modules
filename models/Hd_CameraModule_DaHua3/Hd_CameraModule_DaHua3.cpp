@@ -686,7 +686,7 @@ bool create(const QString& DeviceSn, const QString& name, const QString& path)
 	if (DeviceSn.isEmpty() || name.isEmpty() || path.isEmpty())
 		return false;
 	OnePb temp;
-	temp.base = new Hd_CameraModule_DaHua3(DeviceSn, path + "/Hd_CameraModule_HIK3/");
+	temp.base = new Hd_CameraModule_DaHua3(DeviceSn, path + "/Hd_CameraModule_DaHua3/");
 	if (!temp.base->init())
 		return false;
 	temp.baseWidget = new mPrivateWidget(temp.base);

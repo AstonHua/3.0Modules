@@ -16,7 +16,7 @@ const QByteArray FirstCreateByte
 "TriggerSource": "hard",
 "OnceImageCounts":"2"})");
 
-cameraFunSDKfactoryCls  GetDeviceInfo("","");
+CameraFunSDKfactoryCls  GetDeviceInfo("","");
 struct OnePb
 {
 	PbGlobalObject* base = nullptr;
@@ -29,7 +29,7 @@ QMap<QString, OnePb>  TotalMap;
 
 
 #pragma region Device control
-bool cameraFunSDKfactoryCls::Connect(string name)
+bool CameraFunSDKfactoryCls::Connect(string name)
 {
 	KglSystem kglSystem;
 	const KglDeviceInfo* deviceInfo;
@@ -111,7 +111,7 @@ bool cameraFunSDKfactoryCls::Connect(string name)
 	kgllStreamFeatureNodes = kglStream->getStreamParameters();
 	return true;
 }
-void cameraFunSDKfactoryCls::Disconnect()
+void CameraFunSDKfactoryCls::Disconnect()
 {
 	if ((kglStream != NULL) && (kglStream->isOpen()))
 	{
@@ -134,12 +134,11 @@ void cameraFunSDKfactoryCls::Disconnect()
 
 #pragma region Feature access
 
-void cameraFunSDKfactoryCls::setFeatureNodes(const std::string sFeatureName, const int64_t value)
+void CameraFunSDKfactoryCls::setFeatureNodes(const std::string sFeatureName, const int64_t value)
 {
 	KglResult result;
 	KglString sConfigurationLastFailureCause;
 
-	qDebug() << "(2.5Dmodel) " << "[setFeatureNodes] " << sFeatureName.c_str() << value;
 	result = kgllStreamFeatureNodes->setIntegerValue(sFeatureName.c_str(), value);
 	if (KGL_SUCCESS != result)
 	{
@@ -148,12 +147,11 @@ void cameraFunSDKfactoryCls::setFeatureNodes(const std::string sFeatureName, con
 	}
 
 }
-void cameraFunSDKfactoryCls::setIntegerValue(const std::string sFeatureName, const int64_t value)
+void CameraFunSDKfactoryCls::setIntegerValue(const std::string sFeatureName, const int64_t value)
 {
 	KglResult result;
 	KglString sConfigurationLastFailureCause;
 
-	qDebug() << "(2.5Dmodel) " << "[setIntegerValue] " << sFeatureName.c_str() << value;
 	result = kgllFeatureNodes->setIntegerValue(sFeatureName.c_str(), value);
 	if (KGL_SUCCESS != result)
 	{
@@ -162,12 +160,11 @@ void cameraFunSDKfactoryCls::setIntegerValue(const std::string sFeatureName, con
 	}
 
 }
-void cameraFunSDKfactoryCls::setFloatValue(const std::string sFeatureName, const double value)
+void CameraFunSDKfactoryCls::setFloatValue(const std::string sFeatureName, const double value)
 {
 	KglResult result;
 	KglString sConfigurationLastFailureCause;
 
-	qDebug() << "(2.5Dmodel) " << "[setFloatValue] " << sFeatureName.c_str() << value;
 	result = kgllFeatureNodes->setFloatValue(sFeatureName.c_str(), value);
 	if (KGL_SUCCESS != result)
 	{
@@ -178,12 +175,11 @@ void cameraFunSDKfactoryCls::setFloatValue(const std::string sFeatureName, const
 		}
 	}
 }
-void cameraFunSDKfactoryCls::setBooleanValue(const std::string sFeatureName, const bool value)
+void CameraFunSDKfactoryCls::setBooleanValue(const std::string sFeatureName, const bool value)
 {
 	KglResult result;
 	KglString sConfigurationLastFailureCause;
 
-	qDebug() << "(2.5Dmodel) " << "[setBooleanValue] " << sFeatureName.c_str() << value;
 	result = kgllFeatureNodes->setBooleanValue(sFeatureName.c_str(), value);
 	if (KGL_SUCCESS != result)
 	{
@@ -194,12 +190,11 @@ void cameraFunSDKfactoryCls::setBooleanValue(const std::string sFeatureName, con
 		}
 	}
 }
-void cameraFunSDKfactoryCls::setEnumValue(const std::string sFeatureName, std::string value)
+void CameraFunSDKfactoryCls::setEnumValue(const std::string sFeatureName, std::string value)
 {
 	KglResult result;
 	KglString sConfigurationLastFailureCause;
 
-	qDebug() << "(2.5Dmodel) " << "[setEnumValue] " << sFeatureName.c_str() << value.c_str();
 	result = kgllFeatureNodes->setEnumValue(sFeatureName.c_str(), value.c_str());
 	if (KGL_SUCCESS != result)
 	{
@@ -207,12 +202,11 @@ void cameraFunSDKfactoryCls::setEnumValue(const std::string sFeatureName, std::s
 		return;
 	}
 }
-void cameraFunSDKfactoryCls::setStringValue(const std::string sFeatureName, const std::string value)
+void CameraFunSDKfactoryCls::setStringValue(const std::string sFeatureName, const std::string value)
 {
 	KglResult result;
 	KglString sConfigurationLastFailureCause;
 
-	qDebug() << "(2.5Dmodel) " << "[setStringValue] " << sFeatureName.c_str() << value.c_str();
 	result = kgllFeatureNodes->setStringValue(sFeatureName.c_str(), value.c_str());
 	if (KGL_SUCCESS != result)
 	{
@@ -220,10 +214,9 @@ void cameraFunSDKfactoryCls::setStringValue(const std::string sFeatureName, cons
 		return;
 	}
 }
-void cameraFunSDKfactoryCls::executeCommand(const std::string sFeatureName)
+void CameraFunSDKfactoryCls::executeCommand(const std::string sFeatureName)
 {
 	KglResult result;
-	qDebug() << "(2.5Dmodel) " << "[executeCommand] " << sFeatureName.c_str();
 	result = kgllFeatureNodes->executeCommand(sFeatureName.c_str());
 	if (KGL_SUCCESS != result)
 	{
@@ -232,7 +225,7 @@ void cameraFunSDKfactoryCls::executeCommand(const std::string sFeatureName)
 	}
 }
 
-void cameraFunSDKfactoryCls::getIntegerValue(const std::string sFeatureName, int64_t& value)
+void CameraFunSDKfactoryCls::getIntegerValue(const std::string sFeatureName, int64_t& value)
 {
 	KglResult result;
 
@@ -243,7 +236,7 @@ void cameraFunSDKfactoryCls::getIntegerValue(const std::string sFeatureName, int
 		return;
 	}
 }
-void cameraFunSDKfactoryCls::getFloatValue(const std::string sFeatureName, double& value)
+void CameraFunSDKfactoryCls::getFloatValue(const std::string sFeatureName, double& value)
 {
 	KglResult result;
 
@@ -255,7 +248,7 @@ void cameraFunSDKfactoryCls::getFloatValue(const std::string sFeatureName, doubl
 	}
 }
 
-void cameraFunSDKfactoryCls::getBooleanValue(const std::string sFeatureName, bool& value)
+void CameraFunSDKfactoryCls::getBooleanValue(const std::string sFeatureName, bool& value)
 {
 	KglResult result;
 
@@ -267,7 +260,7 @@ void cameraFunSDKfactoryCls::getBooleanValue(const std::string sFeatureName, boo
 	}
 }
 
-void cameraFunSDKfactoryCls::getEnumValue(const std::string sFeatureName, std::string& value)
+void CameraFunSDKfactoryCls::getEnumValue(const std::string sFeatureName, std::string& value)
 {
 	KglResult result;
 	KglString featurevalue;
@@ -282,7 +275,7 @@ void cameraFunSDKfactoryCls::getEnumValue(const std::string sFeatureName, std::s
 	}
 }
 
-void cameraFunSDKfactoryCls::getStringValue(const std::string sFeatureName, std::string& value)
+void CameraFunSDKfactoryCls::getStringValue(const std::string sFeatureName, std::string& value)
 {
 	KglResult result;
 	KglString featurevalue;
@@ -295,26 +288,11 @@ void cameraFunSDKfactoryCls::getStringValue(const std::string sFeatureName, std:
 		return;
 	}
 }
-//
-//bool setSystemFeatureValue(const std::string sFeatureName, const int64_t value)
-//{
-//	KglResult result;
-//	KglString sConfigurationLastFailureCause;
-//
-//	qDebug() << ("2.5Dmodel\t") << "[setSystemFeatureValue] " << sFeatureName.c_str() << value;
-//	result = kgllFeatureNodes->setIntegerValue(sFeatureName.c_str(), value);
-//	if (KGL_SUCCESS != result)
-//	{
-//		qDebug() << ("2.5Dmodel\t") << ("Error : setParam\n");
-//		QString str = QString::fromStdString(sFeatureName) + "_" + QString::number(result, 16);
-//		throw exception(str.toStdString().c_str());
-//		return;
-//	}
-//}
+
 #pragma endregion
 
 #pragma region  Import XML 
-void cameraFunSDKfactoryCls::ImportDeviceParameters(std::string sFilePath)
+void CameraFunSDKfactoryCls::ImportDeviceParameters(std::string sFilePath)
 {
 	setEnumValue("OperationMode", "SetupMode");
 
@@ -345,7 +323,7 @@ void cameraFunSDKfactoryCls::ImportDeviceParameters(std::string sFilePath)
 #pragma endregion
 
 #pragma region Optional Functions
-std::vector<std::string> cameraFunSDKfactoryCls::GetEnableImageType(std::string sImageType)
+std::vector<std::string> CameraFunSDKfactoryCls::GetEnableImageType(std::string sImageType)
 {
 	std::vector<std::string> EnableImageType;
 
@@ -597,7 +575,7 @@ std::vector<std::string> cameraFunSDKfactoryCls::GetEnableImageType(std::string 
 	return EnableImageType;
 }
 
-void cameraFunSDKfactoryCls::ConvertRGBA8toBGRA8(void* buffer, int pixelSize)
+void CameraFunSDKfactoryCls::ConvertRGBA8toBGRA8(void* buffer, int pixelSize)
 {
 	byte dataR;
 	byte dataB;
@@ -615,7 +593,7 @@ void cameraFunSDKfactoryCls::ConvertRGBA8toBGRA8(void* buffer, int pixelSize)
 
 #pragma region Acquisition control
 
-bool cameraFunSDKfactoryCls::AcquisitionStart()
+bool CameraFunSDKfactoryCls::AcquisitionStart()
 {
 	KglResult result;
 
@@ -629,7 +607,7 @@ bool cameraFunSDKfactoryCls::AcquisitionStart()
 	return true;
 }
 
-void cameraFunSDKfactoryCls::AcquisitionStop()
+void CameraFunSDKfactoryCls::AcquisitionStop()
 {
 	KglResult result;
 
@@ -640,7 +618,7 @@ void cameraFunSDKfactoryCls::AcquisitionStop()
 	}
 }
 
-bool cameraFunSDKfactoryCls::QueueBuffer()
+bool CameraFunSDKfactoryCls::QueueBuffer(KglBuffer* kglBuffer)
 {
 	KglResult result;
 	KglResult operationResult;
@@ -648,7 +626,7 @@ bool cameraFunSDKfactoryCls::QueueBuffer()
 	uint32_t payloadsize = kglDevice->getPayloadSize();
 	if (payloadsize == 0)
 	{
-		qDebug() << ("Error : getPayloadSize\n");
+		qWarning() << ("Error : getPayloadSize\n");
 		return false;
 	}
 
@@ -656,46 +634,44 @@ bool cameraFunSDKfactoryCls::QueueBuffer()
 	result = kglBuffer->allocate(payloadsize);
 	if (KGL_SUCCESS != result)
 	{
-		qDebug() << ("Error : allocate\n");
+		qWarning() << ("Error : allocate\n");
 		return false;
 	}
 
 	result = kglStream->queueBuffer(kglBuffer);
 	if ((KGL_SUCCESS != result) && (KGL_PENDING != result))
 	{
-		qDebug() << ("Error : queueBuffer\n");
+		qWarning() << ("Error : queueBuffer\n");
 		return false;
 	}
 	return true;
 }
 
-cv::Mat cameraFunSDKfactoryCls::RetrieveBuffer(std::string imagetype)
+cv::Mat CameraFunSDKfactoryCls::RetrieveBuffer(KglBuffer* kglBuffer, cv::Mat& bmpMat)
 {
 	KglResult result;
 	KglResult operationResult;
 
-	clock_t startc = clock();
-	result = kglStream->retrieveBuffer(&kglBuffer, operationResult, MaxTimeOut);
-	clock_t endc = clock();
+	result = kglStream->retrieveBuffer(&kglBuffer, operationResult, 10000);
 	if ((KGL_SUCCESS != result) || (KGL_SUCCESS != operationResult))
 	{
-		qCritical() << "[retrieveBuffer] " << "result:" << result;
-		qCritical() << "[retrieveBuffer] " << "operationResult:" << operationResult;
+		
+		qWarning() << "[retrieveBuffer] " << "result:" << result;
+		qWarning() << "[retrieveBuffer] " << "operationResult:" << operationResult;
 		if (kglBuffer != NULL)
 		{
 			kglBuffer->free();//设置成只执行一次
 			delete(kglBuffer);
 			kglBuffer = NULL;
 		}
-		qCritical() << ("Error : retrieveBuffer\n");
-		return Mat();
+		qWarning() << ("Error : retrieveBuffer\n");
+		return cv::Mat::zeros(500, 500, CV_8UC1);
 	}
-	//qDebug() << "kglStream->retrieveBuffer time " << endc - startc;
+
 	UINT bmpSize = kglBuffer->getAcquiredSize();
 	char* data = (char*)malloc(bmpSize);
 
 	CopyMemory((void*)data, kglBuffer->getDataPointer(), bmpSize);
-
 	cv::Mat mat;
 	int64_t width;
 	int64_t height;
@@ -732,10 +708,9 @@ cv::Mat cameraFunSDKfactoryCls::RetrieveBuffer(std::string imagetype)
 
 	else if (sPixelFormat == "RGBA8Packed")
 	{
-		mat = cv::Mat(height, width, CV_8UC3, data);
+		mat = cv::Mat(height, width, CV_8UC4, data);
 		cv::cvtColor(mat, mat, COLOR_BGRA2RGBA);
 	}
-	//kglBuffer->free();
 	if (kglBuffer != NULL)
 	{
 		kglBuffer->free();
@@ -743,61 +718,15 @@ cv::Mat cameraFunSDKfactoryCls::RetrieveBuffer(std::string imagetype)
 		kglBuffer = NULL;
 	}
 
-	cv::Mat bmpMat;
 	mat.copyTo(bmpMat);
 	if (data)
 	{
 		free(data);
 	}
-	qDebug() << " 2.5D get " << QString::fromStdString(imagetype) << " image size:" << bmpMat.cols << "," << bmpMat.rows;
-	//imwrite("C:\\pic\\Img" + to_string(imgNum) + ".bmp", bmpMat);
-	//imgNum++;
 	return bmpMat;
 }
 
-void cameraFunSDKfactoryCls::SaveBMP(cv::Mat bmp)
-{
-	std::string inputkey;
-	std::string sFilePath;
-
-	qDebug() << ("Do you want to save the image as a BMP file?\n\n");
-	qDebug() << ("1 :Yes\n");
-	qDebug() << ("2 : No\n");
-	std::cin >> inputkey;
-	qDebug() << ("------------------------------\n");
-	switch (atoi(inputkey.c_str()))
-	{
-	case 1:
-		qDebug() << ("Enter the full path of the BMP file.\n\n");
-		std::cin >> sFilePath;
-		qDebug() << ("------------------------------\n");
-		break;
-	case 2:
-		return;
-		break;
-	default:
-		qDebug() << ("The entry is invalid.\n");
-		return;
-		break;
-	}
-	try
-	{
-		/*System::String^ FilePath = gcnew System::String(sFilePath.c_str());
-		FileStream^ stream = gcnew FileStream(FilePath, FileMode::Create, FileAccess::Write);
-		TiffBitmapEncoder^ encoder = gcnew TiffBitmapEncoder();
-		encoder->Compression = TiffCompressOption::None;
-		encoder->Frames->Add(BitmapFrame::Create(bmp));
-		encoder->Save(stream);*/
-		//cv::imwrite(sFilePath, bmp);
-	}
-	catch (char)
-	{
-		qDebug() << ("Failed to save the BMP file.\n");
-		qDebug() << ("------------------------------");
-	}
-}
-
-bool cameraFunSDKfactoryCls::TriggerSoftware()
+bool CameraFunSDKfactoryCls::TriggerSoftware()
 {
 	//Sleep(3000);
 	/*KglResult result;
@@ -811,42 +740,39 @@ bool cameraFunSDKfactoryCls::TriggerSoftware()
 
 #pragma endregion
 
-bool cameraFunSDKfactoryCls::AcquisitionStartEx_SingleFrame(bool bMultiCaptureUpdateImage, std::string sMultiCaptureImageType, cv::Mat& result)
+bool CameraFunSDKfactoryCls::AcquisitionStartEx_SingleFrame(bool bMultiCaptureUpdateImage, std::string sMultiCaptureImageType, std::vector<cv::Mat>& matVec)
 {
-	{
-		setBooleanValue("MultiCaptureUpdateImage", bMultiCaptureUpdateImage);
-		setEnumValue("MultiCaptureImageType", sMultiCaptureImageType);
+	std::string sPixelFormat;
+	setBooleanValue("MultiCaptureUpdateImage", bMultiCaptureUpdateImage);
+	setEnumValue("MultiCaptureImageType", sMultiCaptureImageType);
 
-		if (!QueueBuffer())
-		{
-			return false;
-		}
-		AcquisitionStart();
-	}
 	cv::Mat bmp;
-	clock_t startc = clock();
-	bmp = RetrieveBuffer(sMultiCaptureImageType);
-	clock_t endc = clock();
-	//qDebug() << " retrievetime " << endc - startc;
+	KglBuffer* kglBuffer = nullptr;
+	if (!QueueBuffer(kglBuffer))
+		return false;
+	AcquisitionStart();
+
+	RetrieveBuffer(kglBuffer, bmp);
 	if (!bmp.empty())
 	{
-		result = bmp;
-		AcquisitionStop();
+		//AcquisitionStop();
+		matVec.push_back(bmp);
 		return true;
 	}
 	else
 	{
-		AcquisitionStop();
+		//AcquisitionStop();
 		return false;
 	}
+
 }
 
-cameraFunSDKfactoryCls::cameraFunSDKfactoryCls(QString sn,QString path ) :snName(sn.toStdString()),RootPath(path)
+CameraFunSDKfactoryCls::CameraFunSDKfactoryCls(QString sn,QString path ) :snName(sn.toStdString()),RootPath(path)
 {
 	MatVecQueue = std::make_shared<ThreadSafeQueue<std::vector<Mat>>>();
 }
 
-cameraFunSDKfactoryCls::~cameraFunSDKfactoryCls()
+CameraFunSDKfactoryCls::~CameraFunSDKfactoryCls()
 {
 	stopbit = true;
 	//getpicturethreadqueue->end();
@@ -855,13 +781,13 @@ cameraFunSDKfactoryCls::~cameraFunSDKfactoryCls()
 	Disconnect();
 }
 
-void cameraFunSDKfactoryCls::upDateParam()
+void CameraFunSDKfactoryCls::upDateParam()
 {
 	GetImageNums = ParasValueMap.value("OneSgnalsGetImageCounts").toInt();
 	MaxTimeOut = ParasValueMap.value("OneGetImageTimeOut").toInt();
 }
 
-bool cameraFunSDKfactoryCls::initSdk(QMap<QString, QString>& insideValuesMaps)
+bool CameraFunSDKfactoryCls::initSdk(QMap<QString, QString>& insideValuesMaps)
 {
 	//QString jsonpath = insideValuesMaps["jsonPath"];
 	//QString json_cfg_file_path = jsonpath + "/camera_Example.json";
@@ -914,11 +840,11 @@ bool cameraFunSDKfactoryCls::initSdk(QMap<QString, QString>& insideValuesMaps)
 	insideValuesMaps["OnceImageCounts"] = QString::number(sImageType.size());
 	insideValuesMaps["ImageIndexType"] = QString::number(sImageType.size());
 	insideValuesMaps["TriggerSource"] = QString::fromStdString(CurrentsTriggerSource);
-	getpicturethread = std::thread(&cameraFunSDKfactoryCls::getPictureThread, this);
+	getpicturethread = std::thread(&CameraFunSDKfactoryCls::getPictureThread, this);
 	return true;
 }
 
-bool cameraFunSDKfactoryCls::setParamMap(const QMap<QString, QString>& ParasValueMap)
+bool CameraFunSDKfactoryCls::setParamMap(const QMap<QString, QString>& ParasValueMap)
 {
 	this->ParasValueMap = ParasValueMap; 
 
@@ -927,7 +853,7 @@ bool cameraFunSDKfactoryCls::setParamMap(const QMap<QString, QString>& ParasValu
 	return true;
 }
 
-void cameraFunSDKfactoryCls::getPictureThread()
+void CameraFunSDKfactoryCls::getPictureThread()
 {
 	while (!stopbit)
 	{
@@ -938,19 +864,17 @@ void cameraFunSDKfactoryCls::getPictureThread()
 		}
 			
 		std::vector<cv::Mat> matvec;
-		cv::Mat image1;
-		if (AcquisitionStartEx_SingleFrame(true, sImageType[0], image1))
+		if (AcquisitionStartEx_SingleFrame(true, sImageType[0], matvec) ==true)
 		{
-			matvec.push_back(image1);
+
 			for (int i = 1; i < sImageType.size(); i++)
 			{
-				cv::Mat image2;
-				if (AcquisitionStartEx_SingleFrame(false, sImageType[i], image2))
+				if (sImageType[i] != "" && sImageType[i] != sImageType[i - 1])	
 				{
-					matvec.push_back(image2);
+					AcquisitionStartEx_SingleFrame(false, sImageType[i], matvec);
 				}
 			}
-			if (allowflag.load(std::memory_order::memory_order_acquire))
+			//if (allowflag.load(std::memory_order::memory_order_acquire))
 			{
 				if (CurrentsTriggerSource == "Software")
 				{
@@ -959,13 +883,29 @@ void cameraFunSDKfactoryCls::getPictureThread()
 				}
 				else
 				{
-					CallbackFuncVec.at(Currentindex).GetimagescallbackFunc(CallbackFuncVec.at(Currentindex).callbackparent, matvec);
+					int index = Currentindex* matvec.size();
+
+					for (auto& elem : matvec) 
+					{
+						QList<cv::Mat> dst;
+						dst.push_back(std::move(elem)); // 移动而非拷贝，elem 变为有效但未指定的状态
+						QObject* obj = CallbackFuncMap.value(index).callbackparent;
+						obj->setProperty("cameraIndex", QString::number(index));
+
+						CallbackFuncMap.value(index).GetimagescallbackFunc(obj, dst);
+						index++;
+					}
+		
 				}
 			
 			}
 			Currentindex++;
 		}
-		if (GetImageNums == Currentindex)ThreadRunningflag=false;
+		if (Currentindex >= GetImageNums)
+		{
+			Currentindex = 0;
+			ThreadRunningflag = false;
+		}
 	}
 }
 
@@ -982,8 +922,8 @@ Hd_25DCameraVJ_module::Hd_25DCameraVJ_module(QString SnName,QString path,int set
 	{
 		ParasValueMap.insert(objStr, paramObj.value(objStr).toString());
 	}
-	m_sdkFunc = new cameraFunSDKfactoryCls(SnName, RootPath);
-	connect(m_sdkFunc, &cameraFunSDKfactoryCls::trigged, this, [=](int value) {emit trigged(value); });
+	m_sdkFunc = new CameraFunSDKfactoryCls(SnName, RootPath);
+	connect(m_sdkFunc, &CameraFunSDKfactoryCls::trigged, this, [=](int value) {emit trigged(value); });
 }
 
 Hd_25DCameraVJ_module::~Hd_25DCameraVJ_module()
@@ -998,7 +938,6 @@ Hd_25DCameraVJ_module::~Hd_25DCameraVJ_module()
 
 bool Hd_25DCameraVJ_module::data(std::vector<cv::Mat>& outmats, QStringList& outdata)
 {
-	//qDebug() << m_sdkFunc->MaxTimeOut<< outmats.size();
 	auto ret = m_sdkFunc->MatVecQueue->wait_for_pop(m_sdkFunc->MaxTimeOut, outmats);
 
 	if (outmats.size() != m_sdkFunc->sImageType.size() || ret == false)
@@ -1031,8 +970,12 @@ bool Hd_25DCameraVJ_module::init()
 		{
 			m_sdkFunc->Currentindex = 0;
 			m_sdkFunc->MatVecQueue->clear();
+			m_sdkFunc->executeCommand("BufferCaptureAcquisitionStop");
+			m_sdkFunc->executeCommand("ImageCaptureBufferClear");
+			m_sdkFunc->executeCommand("BufferCaptureAcquisitionStart");
 			m_sdkFunc->allowflag.store(true, std::memory_order::memory_order_release);
 			m_sdkFunc->ThreadRunningflag = true;
+			emit trigged(501);
 		}
 		else if (Code == 1001)
 		{
@@ -1081,8 +1024,23 @@ void Hd_25DCameraVJ_module::registerCallBackFun(PBGLOBAL_CALLBACK_FUN func, QObj
 	TempPack.callbackparent = parent;
 	TempPack.cameraIndex = getString;
 	TempPack.GetimagescallbackFunc = func;
-	m_sdkFunc->CallbackFuncVec.append(TempPack);
-	qDebug() << getString;
+	m_sdkFunc->CallbackFuncMap.insert(getString.toInt(), TempPack);
+	qDebug() << m_sdkFunc << "registerCallBackFun" << getString;
+}
+void Hd_25DCameraVJ_module::cancelCallBackFun(PBGLOBAL_CALLBACK_FUN callBackFun, QObject* parent, const QString& getString)
+{
+	int index = getString.toInt();
+	if (m_sdkFunc->CallbackFuncMap.keys().contains(index))
+	{
+		if (callBackFun == m_sdkFunc->CallbackFuncMap.value(index).GetimagescallbackFunc)
+			m_sdkFunc->CallbackFuncMap.remove(index);
+		else
+		{
+			qCritical() << "key of Values != Input Callbackfun" << getString;
+		}
+		qDebug() << "cancelCallBackFun" << getString;
+	}
+	return;
 }
 
 LocalKglDeviceEventSink::LocalKglDeviceEventSink()
@@ -1184,7 +1142,7 @@ bool create(const QString& DeviceSn, const QString& name, const QString& path)
 	OnePb temp;
 	temp.base = new Hd_25DCameraVJ_module(DeviceSn, path+"/Hd_CameraModule_Keyence25DVJ3/");
 	temp.baseWidget = new mPrivateWidget(temp.base);
-	temp.base->registerCallBackFun(GetCallbackMat, temp.baseWidget,"0");
+	//temp.base->registerCallBackFun(GetCallbackMat, temp.baseWidget,"0");
 	temp.DeviceSn = DeviceSn;
 	TotalMap.insert(name.split(':').first(), temp);
 	return  temp.base->init();

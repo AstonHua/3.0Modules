@@ -1,1291 +1,1887 @@
 ﻿#include "Hd_CameraModule_Basler3.h"
-#include "qfuture.h"
-#include <QtConcurrent/QtConcurrent>
-#include <QTextCodec>
 
+// 全局变量
+QMap<QString, OnePb_Basler> TotalMap_Basler;
+Pylon::DeviceInfoList_t g_deviceList;  // 修正类型
 
-//判断是否为彩色相机
-bool IsColor(EPixelType enType)
+//=============================================================================
+// 工具函数实现
+//=============================================================================
+bool SearchBaslerDevice()
 {
-	switch (enType)
-	{
-	case PixelType_RGB8packed:
-	case PixelType_BayerGR8:
-	case PixelType_BayerRG8:
-	case PixelType_BayerGB8:
-	case PixelType_BayerBG8:
-	case PixelType_BayerGR10:
-	case PixelType_BayerRG10:
-	case PixelType_BayerGB10:
-	case PixelType_BayerBG10:
-	case PixelType_BayerGR12:
-	case PixelType_BayerRG12:
-	case PixelType_BayerGB12:
-	case PixelType_BayerBG12:
-	case PixelType_RGB10packed:
-	case PixelType_BGR10packed:
-	case PixelType_RGB12packed:
-	case PixelType_BGR12packed:
-	case PixelType_YUV422_YUYV_Packed:
-	case PixelType_BayerGR12Packed:
-	case PixelType_BayerRG12Packed:
-	case PixelType_BayerGB12Packed:
-	case PixelType_BayerBG12Packed:
-		return true;
-	default:
-		return false;
-	}
+    try
+    {
+        Pylon::PylonInitialize();
+        Pylon::CTlFactory& tlFactory = Pylon::CTlFactory::GetInstance();
+        g_deviceList.clear();
+        tlFactory.EnumerateDevices(g_deviceList);  // 修正调用方式
+        return (g_deviceList.size() > 0);
+    }
+    catch (const Pylon::GenericException& e)
+    {
+        qDebug() << "SearchBaslerDevice error: " << e.GetDescription();
+        return false;
+    }
 }
-//搜索设备
-int Hd_CameraModule_Basler3::SearchDevice()
+
+bool IsColorBasler(Pylon::EPixelType enType)
 {
-	//Pylon::DeviceInfoList_t devices; //还是设置曝光崩溃
- //   try
- //   {
- //       // Get the transport layer factory.
- //       Pylon::CTlFactory& TlFactory = Pylon::CTlFactory::GetInstance();
-
- //       // Get all attached cameras.
- //       TlFactory.EnumerateDevices( devices );
- //   }
-
-
-	// Before using any pylon methods, the pylon runtime must be initialized.
-	Pylon::PylonAutoInitTerm autoInitTerm;
-	// Create GigE transport layer.
-	Pylon::CTlFactory& TlFactory = Pylon::CTlFactory::GetInstance();
-	Pylon::IGigETransportLayer* pTl = dynamic_cast<Pylon::IGigETransportLayer*>(TlFactory.CreateTl(Pylon::BaslerGigEDeviceClass));
-	if (pTl == NULL)
-	{
-		cerr << "Error: No GigE transport layer installed." << endl;
-		cerr << "       Please install GigE support as it is required for this sample." << endl;
-		return 1;
-	}
-
-	// Enumerate devices.
-	//Pylon::DeviceInfoList_t devices;
-	pTl->EnumerateAllDevices(m_devices);
-	//m_devices = devices;
-	int mindex = 0;
-	// Print information table.
-	for (Pylon::DeviceInfoList_t::const_iterator it = m_devices.begin(); it != m_devices.end(); ++it)
-	{
-		// Add the friendly name to the list. 
-		Pylon::String_t SerialNumber = it->GetSerialNumber();
-		std::string s = SerialNumber;
-		if (s == Username)
-		{
-			index = mindex;
-			//自动IP
-			{
-				// Determine current configuration mode.
-				Pylon::String_t activeMode;
-				if (it->IsPersistentIpActive())
-				{
-					activeMode = "Static";
-				}
-				else if (it->IsDhcpActive())
-				{
-					activeMode = "DHCP";
-				}
-				else
-				{
-					activeMode = "AutoIP";
-				}
-
-				cout.width(32);
-				cout << it->GetFriendlyName();
-				cout.width(14);
-				cout << it->GetMacAddress();
-				cout.width(17);
-				cout << it->GetIpAddress();
-				cout.width(17);
-				cout << it->GetSubnetMask();
-				cout.width(15);
-				cout << it->GetDefaultGateway();
-				cout.width(8);
-				cout << activeMode;
-				cout.width(4);
-				cout << it->IsPersistentIpSupported();
-				cout.width(6);
-				cout << it->IsDhcpSupported();
-				cout.width(5);
-				cout << it->IsAutoIpSupported();
-				cout << endl;
-
-				// ch:判断设备IP是否可达
-				bool bAccessible = true;// = MV_CC_IsDeviceAccessible(m_stDevList.pDeviceInfo[index], MV_ACCESS_Exclusive);
-				QStringList nNetExport = QString::fromStdString(std::string(it->GetInterface())).split(".");
-				QStringList nCurrentIp = QString::fromStdString(std::string(it->GetIpAddress())).split(".");
-				if (nNetExport[0] != nCurrentIp[0] || nNetExport[1] != nCurrentIp[1] || nNetExport[2] != nCurrentIp[2])//nCurrentIp相机IP；nNetExport网口IP;判断前3位
-					bAccessible = false;
-				if (!bAccessible)
-				{
-					Pylon::String_t auto_dwIpaddress;
-					for (int i = 2; i < 253; i++)//自动IP
-					{
-						QString qIP = nNetExport[0] + "." + nNetExport[1] + "." + nNetExport[2] + "." + QString::number(i);
-						std::string sIp = qIP.toStdString();
-						auto_dwIpaddress = sIp.c_str();
-
-						bool ifHas = false;
-						for (Pylon::DeviceInfoList_t::const_iterator mit = m_devices.begin(); mit != m_devices.end(); ++mit)
-						{
-							if (auto_dwIpaddress == mit->GetIpAddress())
-							{
-								ifHas = true;
-								break;
-							}
-						}
-						if (ifHas)
-							continue;
-					}
-					//Pylon::String_t sIP = "192.168.4.53";
-					Pylon::String_t subnetMask = "255.255.255.0";
-					Pylon::String_t defaultGateway = "0.0.0.0";
-
-					// Check if configuration mode is AUTO, DHCP, or IP address.
-					bool isAuto = (strcmp(auto_dwIpaddress, "AUTO") == 0);
-					bool isDhcp = (strcmp(auto_dwIpaddress, "DHCP") == 0);
-					bool isStatic = !isAuto && !isDhcp;
-					// Set new IP configuration.
-					bool setOk = pTl->BroadcastIpConfiguration(it->GetMacAddress(), isStatic, isDhcp,
-						auto_dwIpaddress, subnetMask, defaultGateway, it->GetUserDefinedName());
-
-					// Show result message.
-					if (setOk)
-					{
-						pTl->RestartIpConfiguration(it->GetMacAddress());
-						cout << "Successfully changed IP configuration via broadcast for device " << it->GetMacAddress() << " to " << auto_dwIpaddress << endl;
-					}
-					else
-					{
-						cout << "Failed to change IP configuration via broadcast for device " << it->GetMacAddress() << endl;
-						cout << "This is not an error. The device may not support broadcast IP configuration." << endl;
-					}
-				}
-			}
-			break;
-		}
-		mindex++;
-
-	}
-
-	return (int)m_devices.size();
+    switch (enType)
+    {
+    case Pylon::PixelType_BayerBG8:
+    case Pylon::PixelType_BayerGB8:
+    case Pylon::PixelType_BayerRG8:
+    case Pylon::PixelType_BayerGR8:
+    case Pylon::PixelType_BGR8packed:
+    case Pylon::PixelType_RGB8packed:
+    case Pylon::PixelType_YUV422_YUYV_Packed:
+        return true;
+    default:
+        return false;
+    }
 }
-//回调函数
-//当有新图像可用时，从CInstantCamera抓取线程调用此函数。
-//在此处执行图像处理。
-//之后，我们将把图像转换为RGB位图，并通知GUI关于新图像的信息。
-//
-//注意：您不能访问任何UI对象，因为此函数不是从GUI线程调用的。
-//为了更新GUI，我们将在该功能结束时向主窗口发布一条消息。
-//GUI线程将处理消息并更新GUI。
-void Hd_CameraModule_Basler3::OnImageGrabbed(Pylon::CInstantCamera& camera, const CGrabResultPtr& grabResult)
+
+//=============================================================================
+// CameraFunSDKfactoryCls 实现
+//=============================================================================
+CameraFunSDKfactoryCls::CameraFunSDKfactoryCls(QString Sn, QString path, QObject* parent)
+    : QObject(parent), SnCode(Sn.toStdString()), RootPath(path)
 {
-	n_mutex->lock();
-	// The following line is commented out as this function will be called very often
-	// filling up the debug output.
-	//TRACE(_T("%s\n"), __FUNCTIONW__);
-	// When overwriting the current CGrabResultPtr, the previous result will automatically be
-	// released and reused by CInstantCamera.
-	double time_Start = (double)clock();
+    Pylon::PylonInitialize();
+    allowflag = false;
+    triggerMode = 1;
+    camera = nullptr;
+    m_isConnected = false;
 
-	//m_ptrGrabResult = grabResult;
-	//CBaslerUniversalGrabResultPtr ptrGrabResult;CGrabResultPtr
-
-	// First check whether the smart pointer is valid.
-	// Then call GrabSucceeded() on the CGrabResultData to test whether the grab resulut conatains
-	// an sucessfully grabbed image.
-	// In case of i.e. transmission errors the result may be invalid
-	cv::Mat srcImage = cv::Mat();
-	if (grabResult.IsValid() && grabResult->GrabSucceeded())
-	{
-		// This is where you would do image processing
-		// and do other tasks.
-		// --- Start of sample image processing --- (only works for 8-bit formats)
-		if (m_invertImage && grabResult->GetPixelType() == PixelType_Mono8)
-		{
-			srcImage = cv::Mat(grabResult->GetHeight(), grabResult->GetWidth(), CV_8UC1, grabResult->GetBuffer());
-
-			//size_t imageSize = Pylon::ComputeBufferSize(grabResult->GetPixelType(), grabResult->GetWidth(), grabResult->GetHeight(), grabResult->GetPaddingX());
-
-			//uint8_t* p = reinterpret_cast<uint8_t*>(grabResult->GetBuffer());
-			//uint8_t* const pEnd = p + (imageSize / sizeof(uint8_t));
-			//for (; p < pEnd; ++p)
-			//{
-			//	*p = 255 - *p; //For demonstration purposes only, invert the image.
-			//}
-		}
-		else if (m_invertImage && grabResult->GetPixelType() == PixelType_BGR8packed)
-		{
-			srcImage = cv::Mat(grabResult->GetHeight(), grabResult->GetWidth(), CV_8UC3, grabResult->GetBuffer());
-		}
-		else if (IsColor(grabResult->GetPixelType()))
-		{                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
-			// Create a target image.
-			CPylonImage targetImage;
-
-			// Create the converter and set parameters.
-			CImageFormatConverter converter;
-			converter.OutputPixelFormat = PixelType_BGR8packed;
-			// Now we can check if conversion is required.
-			if (converter.ImageHasDestinationFormat(grabResult))
-			{
-				;
-			}
-			else
-			{
-				converter.Convert(targetImage, grabResult);
-			}
-			srcImage = cv::Mat(targetImage.GetHeight(), targetImage.GetWidth(), CV_8UC3, targetImage.GetBuffer());
-		}
-		//++m_cntGrabbedImages;
-
-		ifGetImage = true;
-		//if (srcImage.data)
-		//	queuepic.push_back(srcImage.clone());
-	}
-	else
-	{
-		// If the grab result is invalid, we also mark the bitmap as invalid.
-		m_bitmapImage.Release();
-		ifGetImage = true;
-		// The some TLs provide an error code why the grab failed.
-		//TRACE(_T("%s Grab failed. Error code. %x\n"), __FUNCTIONW__, (int)grabResult->GetErrorCode());
-		//CSingleLock lockErrorCount(&m_MemberLock, TRUE);
-		//++m_cntGrabErrors;
-		//lockErrorCount.Unlock();
-	}
-	if (srcImage.data)
-		queuepic.push_back(srcImage.clone());
-	else
-		queuepic.push_back(cv::Mat(5, 5, CV_8UC1).setTo(0));
-
-	//cv::Mat resizeM;
-	//cv::resize(srcImage, resizeM, cv::Size(), 0.1, 0.1);
-	//cv::imwrite("../runtime/Bin_DEVICE/testImg/"+Username + ".png", resizeM);
-
-	m_flag = true;
-	//callBackNum++;
-	QString tmpDate = QDateTime::currentDateTime().toString("yyyy-MM-dd-hh-mm-ss-zzz");
-	if (currentTriggerSource == Basler_UniversalCameraParams::TriggerSource_Line1)//硬触发，回调
-	{
-		std::vector<cv::Mat> mat;
-		mat.push_back(queuepic.dequeue());
-		//触发回调
-		for (int i = 0; i < QQueue_myPBGLOBAL_callBack.size(); i++)
-			if (QQueue_myPBGLOBAL_callBack[i].cameraIndex == QString::number(imgIndex))
-				(*QQueue_myPBGLOBAL_callBack[i].callBackFun)(QQueue_myPBGLOBAL_callBack[i].m_QObject, mat);
-		imgIndex++;
-		if (expourseTimeList.size() > 1 && expourseTimeList[imgIndex % expourseTimeList.size()]
-			!= expourseTimeList[(imgIndex - 1) % expourseTimeList.size()])
-			SetExposureTime(expourseTimeList[imgIndex % expourseTimeList.size()]);
-		//Sleep(1);
-		if (gainList.size() > 1 && gainList[imgIndex % gainList.size()]
-			!= gainList[(imgIndex - 1) % gainList.size()])
-			SetGain(gainList[imgIndex % gainList.size()]);
-
-		if (imgIndex >= expourseTimeList.size())
-			imgIndex = 0;
-	}
-	n_mutex->unlock();
-	// Tell the main window that there is a new image available so it can update the image window.
-	double time_End = (double)clock();
-	qDebug() << "[INFO] " << __FUNCTION__ << " line:" << __LINE__ << " checkImg getImg,Time:" << time_End - time_Start << "ms"
-		<< "--CameraName:" << QString::fromStdString(Username) << "--imgIndex : " << imgIndex;// << " triggedNum:" << ;
+    m_healthCheckTimer = new QTimer(this);
+    connect(m_healthCheckTimer, &QTimer::timeout, this, &CameraFunSDKfactoryCls::checkCameraHealth);
 }
-//断线回调
-// This will be called when the camera has been removed/disconnected.
-// We'll post a message to the GUI about this event and return.
-// In response to this message, the GUI will be updated and the camera will be closed.
-void Hd_CameraModule_Basler3::OnCameraDeviceRemoved(Pylon::CInstantCamera& camera)
+
+CameraFunSDKfactoryCls::~CameraFunSDKfactoryCls()
 {
-	moduleStatus = false;
-	qDebug() << "[Hd_CameraModule_Basler3] " << " Camera disconnected!  try auto connect";
-	
-	//运行重连线程
-	QFuture<bool> future2 = QtConcurrent::run(this, &Hd_CameraModule_Basler3::reConnctDevice);
+    m_healthCheckTimer->stop();
+
+    if (camera)
+    {
+        disconnectCamera();
+        delete camera;
+        camera = nullptr;
+    }
+    MatQueue.clear();
+    Pylon::PylonTerminate();
 }
-//OnImageGrabbed和OnCameraDeviceRemoved函数，相机创建时自动绑定；相机释放时，自动解除绑定。
-//重连
-bool Hd_CameraModule_Basler3::reConnctDevice()
-{
-	m_camera.StopGrabbing();// Clear the pointers to the features we set manually in Open().
-	m_exposureTime.Release();
-	m_gain.Release();
-	m_camera.DestroyDevice();
-	m_camera.Close();
-	//delete m_camera;
-	//m_camera = nullptr;
 
-	while (1)
-	{
-		if (ifmoduleRun == false)
-			return false;
-		Sleep(100);
-		//m_mutex->lock();
-		if (ConnctDevice() == true)
-		{
-			qWarning() << "[Hd_CameraModule_Basler3] " << "  Camera create success again! ";
-			moduleStatus = true;
-			//m_mutex->unlock();
-			return true;
-		}
-	}
+cv::Mat CameraFunSDKfactoryCls::convertToMat(const Pylon::CGrabResultPtr& ptrGrabResult)
+{
+    cv::Mat img;
+
+    try
+    {
+        int width = ptrGrabResult->GetWidth();
+        int height = ptrGrabResult->GetHeight();
+        Pylon::EPixelType pixelType = ptrGrabResult->GetPixelType();
+        uint8_t* pBuffer = (uint8_t*)ptrGrabResult->GetBuffer();
+
+        switch (pixelType)
+        {
+        case Pylon::PixelType_Mono8:
+            img = cv::Mat(height, width, CV_8UC1, pBuffer).clone();
+            break;
+
+        case Pylon::PixelType_BayerBG8:
+        case Pylon::PixelType_BayerGB8:
+        case Pylon::PixelType_BayerRG8:
+        case Pylon::PixelType_BayerGR8:
+        {
+            cv::Mat rawImg(height, width, CV_8UC1, pBuffer);
+            cv::cvtColor(rawImg, img, cv::COLOR_BayerBG2BGR);
+        }
+        break;
+
+        case Pylon::PixelType_BGR8packed:
+            img = cv::Mat(height, width, CV_8UC3, pBuffer).clone();
+            break;
+
+        case Pylon::PixelType_RGB8packed:
+        {
+            cv::Mat rgbImg(height, width, CV_8UC3, pBuffer);
+            cv::cvtColor(rgbImg, img, cv::COLOR_RGB2BGR);
+        }
+        break;
+
+        default:
+            if (IsColorBasler(pixelType))
+            {
+                img = cv::Mat::zeros(height, width, CV_8UC3);
+            }
+            else
+            {
+                img = cv::Mat::zeros(height, width, CV_8UC1);
+            }
+            break;
+        }
+    }
+    catch (const Pylon::GenericException& e)
+    {
+        qDebug() << "convertToMat error: " << e.GetDescription();
+    }
+
+    return img;
 }
-//连接设备
-bool Hd_CameraModule_Basler3::ConnctDevice()
+
+bool CameraFunSDKfactoryCls::connectCamera(std::string GetSnName)
 {
-	index = -1;
-	SearchDevice();
-	if (index < 0)
-		return false;
+    try
+    {
+        if (!SearchBaslerDevice())
+            return false;
 
-	//m_camera = new CBaslerUniversalInstantCamera;
+        int index = -1;
+        for (size_t i = 0; i < g_deviceList.size(); i++)
+        {
+            std::string sn = g_deviceList[i].GetSerialNumber();
+            if (sn == GetSnName)
+            {
+                index = i;
+                break;
+            }
+        }
 
-	//因为用的new方式
-	{
-		// Register this object as an image event handler in order to get notified of new images.
-		// See Pylon::CImageEventHandler for details.
-		m_camera.RegisterImageEventHandler(this, Pylon::RegistrationMode_ReplaceAll, Pylon::Cleanup_None);
+        if (index == -1)
+            return false;
 
-		// Register this object as a configuration event handler in order to get notified of camera state changes.
-		// See Pylon::CConfigurationEventHandler for details.
-		m_camera.RegisterConfiguration(new Pylon::CAcquireContinuousConfiguration(), Pylon::RegistrationMode_ReplaceAll, Pylon::Cleanup_Delete);
-		m_camera.RegisterConfiguration(this, Pylon::RegistrationMode_Append, Pylon::Cleanup_None);
-	}
-	// Get the pointer to Pylon::CDeviceInfo selected.
-	const Pylon::CDeviceInfo* pDeviceInfo = &m_devices[index];// (const Pylon::CDeviceInfo*)m_cameraBox.GetItemData(index);
+        // 如果相机已存在，先关闭
+        if (camera)
+        {
+            if (camera->IsOpen())
+            {
+                if (camera->IsGrabbing())
+                    camera->StopGrabbing();
+                camera->Close();
+            }
+            delete camera;
+            camera = nullptr;
+        }
 
-	try
-	{
-		// Add the AutoPacketSizeConfiguration and let pylon delete it when not needed anymore.
-		//m_camera.RegisterConfiguration(new CAutoPacketSizeConfiguration(), Pylon::RegistrationMode_Append, Pylon::Cleanup_Delete);
+        // 创建并打开相机 - 修正构造方式
+        Pylon::CTlFactory& tlFactory = Pylon::CTlFactory::GetInstance();
+        Pylon::CDeviceInfo deviceInfo = g_deviceList[index];
+        camera = new Pylon::CBaslerUniversalInstantCamera(tlFactory.CreateDevice(deviceInfo));
 
-		// Create the device and attach it to CInstantCamera.
-		// Let CInstantCamera take care of destroying the device.
-		Pylon::IPylonDevice* pDevice = Pylon::CTlFactory::GetInstance().CreateDevice(*pDeviceInfo);
-		m_camera.Attach(pDevice, Pylon::Cleanup_Delete);
-		if (m_camera.IsPylonDeviceAttached() == false)
-			return false;
-		// Open camera.
-		m_camera.Open(); 
-		
-		//设置心跳；快速进断线回调函数
-		CIntegerParameter heartbeat(m_camera.GetTLNodeMap(), "HeartbeatTimeout");
-		heartbeat.TrySetValue(3000, IntegerValueCorrection_Nearest);  // set to 1000 ms timeout if writable
+        if (!camera)
+            return false;
 
-		// Get the ExposureTime feature.
-		// On GigE cameras, the feature is called 'ExposureTimeRaw'.
-		// On USB cameras, it is called 'ExposureTime'.
-		if (m_camera.ExposureTime.IsValid())
-		{
-			// We need the integer representation because the GUI controls can only use integer values.
-			// If it doesn't exist, return an empty parameter.
-			m_camera.ExposureTime.GetAlternativeIntegerRepresentation(m_exposureTime);
-		}
-		else if (m_camera.ExposureTimeRaw.IsValid())
-		{
-			m_exposureTime.Attach(m_camera.ExposureTimeRaw.GetNode());
-		}
-		// Get the Gain feature.
-		// On GigE cameras, the feature is called 'GainRaw'.
-		// On USB cameras, it is called 'Gain'.
-		if (m_camera.Gain.IsValid())
-		{
-			// We need the integer representation for the this sample
-			// If it doesn't exist, return an empty parameter.
-			m_camera.Gain.GetAlternativeIntegerRepresentation(m_gain);
-		}
-		else if (m_camera.GainRaw.IsValid())
-		{
-			m_gain.Attach(m_camera.GainRaw.GetNode());
-		}
+        camera->Open();
 
-		// Add event handlers that will be called when the feature changes.
+        m_pGrabHandler = new BaslerGrabHandler(this);
+        camera->RegisterImageEventHandler(
+            m_pGrabHandler,                              // 参数1：SDK 兼容的回调对象
+            Pylon::RegistrationMode_ReplaceAll,          // 参数2：注册模式
+            Pylon::Cleanup_Delete                          // 参数3：清理策略
+        );
 
-		if (m_exposureTime.IsValid())
-		{
-			// If we must use the alternative integer representation, we don't know the name of the node as it defined by the camera
-			m_camera.RegisterCameraEventHandler(this, m_exposureTime.GetNode()->GetName(), 0, Pylon::RegistrationMode_Append, Pylon::Cleanup_None, Pylon::CameraEventAvailability_Optional);
-		}
+        // 获取参数范围
+        if (camera->ExposureTimeAbs.IsReadable())
+        {
+            exposureMin = camera->ExposureTimeAbs.GetMin();
+            exposureMax = camera->ExposureTimeAbs.GetMax();
+        }
 
-		if (m_gain.IsValid())
-		{
-			// If we must use the alternative integer representation, we don't know the name of the node as it defined by the camera
-			m_camera.RegisterCameraEventHandler(this, m_gain.GetNode()->GetName(), 0, Pylon::RegistrationMode_Append, Pylon::Cleanup_None, Pylon::CameraEventAvailability_Optional);
-		}
-		////设置曝光，GigE相机为ExposureTimeRaw；USB相机为ExposureTime；方法可行,断电不保存
-		//if (m_camera.ExposureTime.IsValid())
-		//{
-		//	m_camera.ExposureTime.GetAlternativeIntegerRepresentation(m_exposureTime);
-		//	int64_t myExposureTimeRaw=m_camera.ExposureTimeRaw.GetValue();
-		//	m_camera.ExposureTimeRaw.SetValue(20);
-		//}
-		//else if (m_camera.ExposureTimeRaw.IsValid())
-		//{
-		//	m_exposureTime.Attach(m_camera.ExposureTimeRaw.GetNode());
-		//	m_camera.ExposureTimeRaw.SetValue(20);
-		//}
+        if (camera->GainRaw.IsReadable())
+        {
+            gainMin = camera->GainRaw.GetMin();
+            gainMax = camera->GainRaw.GetMax();
+        }
 
-		//线扫相机，设置增益有问题
-		////设置增益，GigE相机为GainRaw；USB相机为Gain
-		//if (m_camera.Gain.IsValid())
-		//{
-		//	m_camera.Gain.GetAlternativeIntegerRepresentation(m_gain);
-		//	m_camera.Gain.SetValue(2);
-		//}
-		//else if (m_camera.GainRaw.IsValid())
-		//{
-		//	m_gain.Attach(m_camera.GainRaw.GetNode());
-		//	m_camera.GainRaw.SetValue(2);
-		//}
+        if (camera->Gamma.IsReadable())
+        {
+            gammaMin = camera->Gamma.GetMin();
+            gammaMax = camera->Gamma.GetMax();
+        }
+        camera->TriggerMode.SetValue(Basler_UniversalCameraParams::TriggerMode_On);
+        setTriggerSource(BASLER_TRIGGER_SOURCE_SOFTWARE);
 
-		//这几行会把相机设置重置
-		//像素格式
-		//m_camera.RegisterCameraEventHandler(this, "PixelFormat", 0, Pylon::RegistrationMode_Append, Pylon::Cleanup_None, Pylon::CameraEventAvailability_Optional);
-		//触发模式
-		//m_camera.RegisterCameraEventHandler(this, "TriggerMode", 0, Pylon::RegistrationMode_Append, Pylon::Cleanup_None, Pylon::CameraEventAvailability_Optional);
-		//触发源
-		//m_camera.RegisterCameraEventHandler(this, "TriggerSource", 0, Pylon::RegistrationMode_Append, Pylon::Cleanup_None, Pylon::CameraEventAvailability_Optional);
+        // 设置默认触发模式\开始采集
 
-		//触发模式
-		m_camera.TriggerSource.SetValue( Basler_UniversalCameraParams::TriggerSource_Software);
-		//触发源
-		m_camera.TriggerMode.SetValue(Basler_UniversalCameraParams::TriggerMode_On);
-		//m_camera.PixelFormat.SetValue();//
+        setTriggerMode(true);
 
-		//连续采集
-		// Camera may have been disconnected.
-		if (!m_camera.IsOpen() || m_camera.IsGrabbing())
-		{
-			return false;
-		}
-		// Try set continuous frame mode if available
-		m_camera.AcquisitionMode.TrySetValue(Basler_UniversalCameraParams::AcquisitionMode_Continuous);
+        m_isConnected = true;
+        m_healthCheckTimer->start(5000);
 
-		// Start grabbing until StopGrabbing() is called.
-		m_camera.StartGrabbing(Pylon::GrabStrategy_OneByOne, Pylon::GrabLoop_ProvidedByInstantCamera);
-		qDebug() << "[StartGrabbing] " << " basler camera StartGrabbing!";
-	}
-	catch (const Pylon::GenericException& e)
-	{
-		qDebug() << "[error] " << " basler camera disconnects!";
-		return false;
-	}
-	return true;
-	////创建相机对象（以最先识别的相机）
-	////camera = CTlFactory::GetInstance().CreateFirstDevice();
-	//CInstantCameraArray cameras(min(devices.size(), c_maxCamerasToUse));
-	//// 打印相机的名称
-	////std::cout << "Using device " << camera.GetDeviceInfo().GetModelName() << endl;
-	//
-	////获取相机节点映射以获得相机参数
-	//GenApi::INodeMap& nodemap = camera.GetNodeMap();
-	////打开相机
-	//camera.Open();
-	////加载用户集，相机设置应当userset1
-	//camera.UserSetSelector.SetValue(UserSetSelector_UserSet1);
-	//camera.RegisterImageEventHandler(new CSampleImageEventHandler, RegistrationMode_Append, Cleanup_Delete);
-	//camera.RegisterExceptionCallBack();
-	// 设置相机参数
-	/*GenApi::cenumerationptr ptracquisitionmode = camera.getparameter("acquisitionmode");
-	ptracquisitionmode->fromstring("continuous");
-
-	genapi::cenumerationptr ptrtriggerselector = camera.getparameter("triggerselector");
-	ptrtriggerselector->fromstring("framestart");
-
-	genapi::cenumerationptr ptrtriggermode = camera.getparameter("triggermode");
-	ptrtriggermode->fromstring("on");
-
-	genapi::cenumerationptr ptrtriggersource = camera.getparameter("triggersource");
-	ptrtriggersource->fromstring("software");
-
-	CIntegerParameter heartbeat( camera.GetTLNodeMap(), "HeartbeatTimeout" );
-    heartbeat.TrySetValue( 1000, IntegerValueCorrection_Nearest );
-	*/
+        qDebug() << "Basler camera connected:" << QString::fromStdString(GetSnName);
+        return true;
+    }
+    catch (const Pylon::GenericException& e)
+    {
+        qDebug() << "connectCamera error: " << e.GetDescription();
+        return false;
+    }
 }
-//错误
-void Hd_CameraModule_Basler3::OnGrabError(Pylon::CInstantCamera& camera, const char* errorMessage)
+// 图像回调函数（全程只注册一次，通过原子变量控制是否处理）
+void CameraFunSDKfactoryCls::onImageGrabbed(CInstantCamera& cam, const CGrabResultPtr& ptrGrabResult)
 {
-	std::cout << "Hd_CameraModule_Basler3 err:: " << errorMessage << std::endl;
+    if (!ptrGrabResult->GrabSucceeded())
+        return;
+    std::vector<cv::Mat> Outmats;
+    CameraFunSDKfactoryCls* currentUser = this;
+    // 3. 转换为Mat（已有逻辑）
+    cv::Mat srcImage = convertToMat(ptrGrabResult);
+    if (srcImage.empty())
+        return;
+    
+    if (this->triggerMode.load(std::memory_order::memory_order_acquire) == 0)
+    {
+        currentUser->triggerOffBack(srcImage);
+        return;
+    }
+    Outmats.push_back(srcImage.clone());
+    //if (currentUser->allowflag.load(std::memory_order::memory_order_acquire))
+    {
+        if (currentUser->m_triggerSource == BASLER_TRIGGER_SOURCE_SOFTWARE)
+        {
+            if (currentUser->allowflag.load(std::memory_order::memory_order_acquire))
+                currentUser->MatQueue.push(Outmats);
+        }
+        else
+        {
+            qDebug() << currentUser->Currentindex;
+            ///硬触发不受开关控制，没有缓存
+            if (currentUser->CallbackFuncMap.keys().contains(currentUser->Currentindex))
+            {
+                QObject* obj = currentUser->CallbackFuncMap.value(currentUser->Currentindex).callbackparent;
+                obj->setProperty("cameraIndex", QString::number(currentUser->Currentindex));
+                currentUser->CallbackFuncMap.value(currentUser->Currentindex).GetimagescallbackFunc(obj, Outmats);
+            }
+            else
+            {
+                qWarning() << "CallbackFuncMap.keys()" << currentUser->CallbackFuncMap.keys() << currentUser->Currentindex;
+            }
+        }
 
-	moduleStatus = false;
+    }
+}
+void CameraFunSDKfactoryCls::disconnectCamera()
+{
+    m_healthCheckTimer->stop();
+
+    if (camera && camera->IsOpen())
+    {
+        if (camera->IsGrabbing())
+        {
+            camera->StopGrabbing();
+            QThread::msleep(100); // 等待采集线程完全退出
+        }
+
+        if (m_pGrabHandler)
+        {
+            camera->DeregisterImageEventHandler(m_pGrabHandler);
+            m_pGrabHandler = nullptr; // 避免野指针
+        }
+        Pylon::CGrabResultPtr ptrGrabResult;
+        while (camera->RetrieveResult(10, ptrGrabResult, Pylon::TimeoutHandling_Return))
+        {
+            ptrGrabResult.Release();
+        }
+        camera->Close();
+    }
+    m_isConnected = false;
+}
+
+void CameraFunSDKfactoryCls::checkCameraHealth()
+{
+    if (!camera || !camera->IsOpen())
+    {
+        if (m_isConnected)
+        {
+            qDebug() << "[Error] Basler camera disconnected!";
+            m_isConnected = false;
+            emit trigged(1);
+
+            // 尝试重连
+            QTimer::singleShot(1000, [this]() {
+                if (connectCamera(SnCode))
+                {
+                    qWarning() << "[Hd_CameraModule_Basler] Reconnect success!";
+                    emit trigged(1);
+                }
+                });
+        }
+        return;
+    }
+
+    try
+    {
+        // 尝试获取设备信息来验证连接
+        Pylon::String_t sn = camera->GetDeviceInfo().GetSerialNumber();
+        if (!m_isConnected)
+        {
+            m_isConnected = true;
+            emit trigged(1);
+        }
+    }
+    catch (const Pylon::GenericException& e)
+    {
+        if (m_isConnected)
+        {
+            qDebug() << "[Error] Basler camera connection lost!";
+            m_isConnected = false;
+            emit trigged(1);
+
+            QTimer::singleShot(1000, [this]() {
+                if (connectCamera(SnCode))
+                {
+                    qWarning() << "[Hd_CameraModule_Basler] Reconnect success!";
+                    emit trigged(1);
+                }
+                });
+        }
+    }
 }
 
 
-Hd_CameraModule_Basler3* create(int settype)
+cv::Mat CameraFunSDKfactoryCls::grabOneImage()
 {
-	qDebug() << __FUNCTION__ << "  line:" << __LINE__ << "Hd_CameraModule_Basler3 create success!";
-	return new Hd_CameraModule_Basler3(settype);
+    cv::Mat img;
+    std::vector<cv::Mat> out;
+    try
+    {
+        if (!camera || !camera->IsGrabbing())
+            return img;
+
+        if (m_triggerSource == BASLER_TRIGGER_SOURCE_SOFTWARE)
+        {
+            // 软触发模式
+            
+            camera->ExecuteSoftwareTrigger();
+
+            Pylon::CGrabResultPtr ptrGrabResult;
+            if (camera->RetrieveResult(1000, ptrGrabResult, Pylon::TimeoutHandling_Return))
+            {
+                // if (ptrGrabResult->GrabSucceeded())
+                // {
+                //     // img = convertToMat(ptrGrabResult);
+                //     // out.push_back(img);
+                //     // MatQueue.push(out);
+                // }
+                
+            }
+            ptrGrabResult.Release();
+        }
+        else
+        {
+            // 硬触发模式
+            Pylon::CGrabResultPtr ptrGrabResult;
+            if (camera->RetrieveResult(5000, ptrGrabResult, Pylon::TimeoutHandling_ThrowException))
+            {
+                if (ptrGrabResult->GrabSucceeded())
+                {
+                    img = convertToMat(ptrGrabResult);
+                    out.push_back(img);
+                    MatQueue.push(out);
+                }
+            }
+        }
+    }
+    catch (const Pylon::GenericException& e)
+    {
+        qDebug() << "grabOneImage error: " << e.GetDescription();
+    }
+
+    return img;
 }
 
-void destory(Hd_CameraModule_Basler3* ptr)
+bool CameraFunSDKfactoryCls::initSdk(QMap<QString, QString>& insideValuesMaps)
 {
-	if (ptr)
-	{
-		delete  ptr;
-		ptr = nullptr;
-	}
-	qDebug() << "[INFO] " << "Hd_CameraModule_Basler3  destory success!";
+    if (!connectCamera(SnCode))
+    {
+        emit trigged(1);
+        return false;
+    }
+
+    emit trigged(1);
+
+    // 获取当前触发源 - 修正版本
+    try
+    {
+        if (camera && camera->IsOpen())
+        {
+            // 使用 ToString() 获取字符串形式
+            GenICam::gcstring source = camera->TriggerSource.ToString();
+
+            if (source == "Software")
+                m_triggerSource = BASLER_TRIGGER_SOURCE_SOFTWARE;
+            else if (source == "Line1")
+                m_triggerSource = BASLER_TRIGGER_SOURCE_LINE1;
+            else if (source == "Line2")
+                m_triggerSource = BASLER_TRIGGER_SOURCE_LINE2;
+            else  // "Line0" 或其他
+                m_triggerSource = BASLER_TRIGGER_SOURCE_ACTION;
+
+            qDebug() << "Current trigger source:" << source.c_str();
+        }
+    }
+    catch (const Pylon::GenericException& e)
+    {
+        qDebug() << "Get trigger source error: " << e.GetDescription();
+        m_triggerSource = BASLER_TRIGGER_SOURCE_SOFTWARE;  // 默认值
+    }
+
+    return true;
 }
 
-//int myIDS[10000] = { 0 };
-
-//类创建
-Hd_CameraModule_Basler3::Hd_CameraModule_Basler3(int settype, QObject* parent) : PbGlobalObject(settype, parent)
+void CameraFunSDKfactoryCls::upDateParam()
 {
-	/*m_MyData = new MyData();
-	MyThread* newMyThread = new MyThread();
-	newMyThread->camera = this;
-
-	m_MyData->n_mutex = new QMutex();
-	m_MyData->ifRunning = true;*/
-
-	PylonInitialize();
-	n_mutex = new QMutex();
-	m_mutex = new QMutex();
-	//QFuture<void> myF= QtConcurrent::run(this, &Hd_CameraModule_Basler3::threadCheckCallBack);
-	if (type1 < 15)
-		famliy = PGOFAMLIY::CAMERA2D;
-	else if (type1 == 15)
-		famliy = PGOFAMLIY::CAMERA2_5D;
-	else if (type1 < 100)
-		famliy = PGOFAMLIY::CAMERA3D;
-	//id = myIDS[type1]++;
-	qDebug() << "famliy::" << famliy;
+    getImageMaxCoiunts = ParasValueMap.value("OnceSignalsGetImageCounts").toInt();
+    OnceGetImageNum = ParasValueMap.value("OnceImageCounts").toInt();
+    timeOut = ParasValueMap.value("GetOnceImageTimes").toInt();
+    qDebug() << "Params updated:" << getImageMaxCoiunts << OnceGetImageNum << timeOut;
 }
 
+bool CameraFunSDKfactoryCls::setArrayByte(QString Key, QJsonArray array)
+{
+    if (Key == "ExposureTime")
+    {
+        exposureTimeMap.clear();
+        for (auto str : array)
+        {
+            QStringList pair = str.toString().split(",", QString::SkipEmptyParts);
+            if (pair.size() == 2)
+            {
+                int index = pair[0].toInt();
+                float value = pair[1].toFloat();
+                exposureTimeMap[index] = value;
+            }
+        }
+    }
+    else if (Key == "Gain")
+    {
+        gainMap.clear();
+        for (auto str : array)
+        {
+            QStringList pair = str.toString().split(",", QString::SkipEmptyParts);
+            if (pair.size() == 2)
+            {
+                int index = pair[0].toInt();
+                float value = pair[1].toFloat();
+                gainMap[index] = value;
+            }
+        }
+    }
+    else if (Key == "Gamma")
+    {
+        gammaMap.clear();
+        for (auto str : array)
+        {
+            QStringList pair = str.toString().split(",", QString::SkipEmptyParts);
+            if (pair.size() == 2)
+            {
+                int index = pair[0].toInt();
+                float value = pair[1].toFloat();
+                gammaMap[index] = value;
+            }
+        }
+    }
+    return true;
+}
+
+bool CameraFunSDKfactoryCls::setExposureTime(float value)
+{
+    try
+    {
+        if (camera && camera->IsOpen() && camera->ExposureTimeAbs.IsWritable())
+        {
+            camera->ExposureTimeAbs.SetValue(value);
+            return true;
+        }
+    }
+    catch (const Pylon::GenericException& e)
+    {
+        qDebug() << "Set exposure time error: " << e.GetDescription();
+    }
+    return false;
+}
+
+bool CameraFunSDKfactoryCls::setGain(int value)
+{
+    try
+    {
+        if (camera && camera->IsOpen() && camera->GainRaw.IsWritable())
+        {
+            camera->GainRaw.SetValue(value);
+            return true;
+        }
+    }
+    catch (const Pylon::GenericException& e)
+    {
+        qDebug() << "Set gain error: " << e.GetDescription();
+    }
+    return false;
+}
+
+bool CameraFunSDKfactoryCls::setGamma(float value)
+{
+    try
+    {
+        if (camera && camera->IsOpen() && camera->Gamma.IsWritable())
+        {
+            camera->Gamma.SetValue(value);
+            return true;
+        }
+    }
+    catch (const Pylon::GenericException& e)
+    {
+        qDebug() << "Set gamma error: " << e.GetDescription();
+    }
+    return false;
+}
+
+bool CameraFunSDKfactoryCls::setTriggerMode(bool on)
+{
+    try
+    {
+        if (camera && camera->IsOpen())
+        {
+            if (camera->IsGrabbing())
+            {
+                camera->StopGrabbing();
+            }
+            if (on)
+            {
+                camera->AcquisitionMode.SetValue(Basler_UniversalCameraParams::AcquisitionMode_Continuous);
+                camera->TriggerMode.SetValue(Basler_UniversalCameraParams::TriggerMode_On);
+                camera->TriggerSource.SetValue(TriggerSourceEnums::TriggerSource_Software); // 强制设为软触发源
+                camera->StartGrabbing(
+                    Pylon::GrabStrategy_LatestImageOnly
+                );
+                
+            }
+            else
+            {
+                camera->AcquisitionMode.SetValue(Basler_UniversalCameraParams::AcquisitionMode_Continuous);
+                camera->TriggerMode.SetValue(Basler_UniversalCameraParams::TriggerMode_Off);
+                camera->StartGrabbing(
+                    Pylon::GrabStrategy_LatestImageOnly,
+                    Pylon::GrabLoop_ProvidedByInstantCamera  
+                );
+                
+            }
+
+            return true;
+        }
+    }
+    catch (const Pylon::GenericException& e)
+    {
+        qDebug() << "Set trigger mode error: " << e.GetDescription();
+    }
+    return false;
+}
+
+bool CameraFunSDKfactoryCls::setTriggerSource(int source)
+{
+    try
+    {
+        if (camera && camera->IsOpen())
+        {
+            switch (source)
+            {
+            case BASLER_TRIGGER_SOURCE_ACTION:
+                camera->TriggerSource.SetValue(TriggerSourceEnums::TriggerSource_Action1);  // 使用字符串
+                break;
+            case BASLER_TRIGGER_SOURCE_LINE1:
+                camera->TriggerSource.SetValue(TriggerSourceEnums::TriggerSource_Line1);
+                break;
+            case BASLER_TRIGGER_SOURCE_LINE2:
+                camera->TriggerSource.SetValue(TriggerSourceEnums::TriggerSource_Line2);
+                break;
+            case BASLER_TRIGGER_SOURCE_SOFTWARE:
+                camera->TriggerSource.SetValue(TriggerSourceEnums::TriggerSource_Software);
+                break;
+            }
+            m_triggerSource = source;
+            return true;
+        }
+    }
+    catch (const Pylon::GenericException& e)
+    {
+        qDebug() << "Set trigger source error: " << e.GetDescription();
+    }
+    return false;
+}
+
+bool CameraFunSDKfactoryCls::setPixelFormat(const QString& format)
+{
+    try
+    {
+        if (camera && camera->IsOpen() && camera->PixelFormat.IsWritable())
+        {
+            if (format == "Mono8")
+                camera->PixelFormat.SetValue(Basler_UniversalCameraParams::PixelFormat_Mono8);
+            else if (format == "BayerBG8")
+                camera->PixelFormat.SetValue(Basler_UniversalCameraParams::PixelFormat_BayerBG8);
+            else if (format == "BayerGB8")
+                camera->PixelFormat.SetValue(Basler_UniversalCameraParams::PixelFormat_BayerGB8);
+            else if (format == "BayerRG8")
+                camera->PixelFormat.SetValue(Basler_UniversalCameraParams::PixelFormat_BayerRG8);
+            else if (format == "BayerGR8")
+                camera->PixelFormat.SetValue(Basler_UniversalCameraParams::PixelFormat_BayerGR8);
+            else if (format == "BGR8")
+                camera->PixelFormat.SetValue("BGR8");
+            else if (format == "RGB8")
+                camera->PixelFormat.SetValue("RGB8");
+            return true;
+        }
+    }
+    catch (const Pylon::GenericException& e)
+    {
+        qDebug() << "Set pixel format error: " << e.GetDescription();
+    }
+    return false;
+}
+
+bool CameraFunSDKfactoryCls::setAcquisitionMode(const QString& mode)
+{
+    try
+    {
+        if (camera && camera->IsOpen() && camera->AcquisitionMode.IsWritable())
+        {
+            if (mode == "Continuous")
+                camera->AcquisitionMode.SetValue(Basler_UniversalCameraParams::AcquisitionMode_Continuous);
+            else if (mode == "SingleFrame")
+                camera->AcquisitionMode.SetValue(Basler_UniversalCameraParams::AcquisitionMode_SingleFrame);
+            else if (mode == "MultiFrame")
+                camera->AcquisitionMode.SetValue(Basler_UniversalCameraParams::AcquisitionMode_MultiFrame);
+            return true;
+        }
+    }
+    catch (const Pylon::GenericException& e)
+    {
+        qDebug() << "Set acquisition mode error: " << e.GetDescription();
+    }
+    return false;
+}
+
+bool CameraFunSDKfactoryCls::softwareTrigger()
+{
+    try
+    {
+        if (camera && camera->IsOpen())
+        {
+            //camera->ExecuteSoftwareTrigger();
+            grabOneImage();
+            return true;
+        }
+    }
+    catch (const Pylon::GenericException& e)
+    {
+        qDebug() << "Software trigger error: " << e.GetDescription();
+    }
+    return false;
+}
+
+//=============================================================================
+// Hd_CameraModule_Basler3 实现
+//=============================================================================
+Hd_CameraModule_Basler3::Hd_CameraModule_Basler3(QString sn, QString path, int settype, QObject* parent)
+    : PbGlobalObject(settype, parent), Sncode(sn), RootPath(path)
+{
+    famliy = CAMERA2D;
+    JsonFilePath = RootPath + Sncode + ".json";
+
+    QString FirstCreateByte(R"({
+        "SeralNum": ")" + sn + R"(",
+        "GetOnceImageTimes": "1000",
+        "LastUpdateTime": "",
+        "OnceImageCounts": "1",
+        "OnceSignalsGetImageCounts": "20",
+        "ExposureTime": [],
+        "Gain": [],
+        "Gamma": []
+    })");
+
+    if (!QFile(JsonFilePath).exists())
+        createAndWritefile(JsonFilePath, FirstCreateByte.toUtf8());
+
+    QJsonObject paramObj = load_JsonFile(JsonFilePath);
+    for (auto objStr : paramObj.keys())
+    {
+        if (paramObj.value(objStr).isString())
+            ParasValueMap.insert(objStr, paramObj.value(objStr).toString());
+    }
+
+    m_sdkFunc = new CameraFunSDKfactoryCls(sn, path, this);
+    connect(m_sdkFunc, &CameraFunSDKfactoryCls::trigged, this,
+        [=](int value) { emit trigged(value); });
+    connect(m_sdkFunc, &CameraFunSDKfactoryCls::imageGrabbed, this,
+        [=](cv::Mat img) { emit sendMats(img); });
+}
 
 Hd_CameraModule_Basler3::~Hd_CameraModule_Basler3()
 {
-	//myIDS[type1]--;
-	/*m_MyData->ifFirst = true;
-	m_MyData->ifRunning = false;
-	m_MyData->m_flag = false;
-	Sleep(10);
-	CloseDevice(m_MyData);
-	if (m_MyData->n_mutex)
-	{
-		delete m_MyData->n_mutex;
-		m_MyData->n_mutex = nullptr;
-	}*/
-	ifFirst = true;
-	ifmoduleRun = false;
-	m_mutex->lock();
-	CloseDevice();
-	m_mutex->unlock();
-	//PylonTerminate();
-	if (m_mutex)
-	{
-		delete m_mutex;
-		m_mutex = nullptr;
-	}
-	qDebug() << __FUNCTION__ << "line:" << __LINE__ << " delete success!";
+    if (m_sdkFunc)
+    {
+        delete m_sdkFunc;
+    }
 }
 
-QJsonObject load_camera_Example()
-{
-	QDir dir = QCoreApplication::applicationDirPath();
-	QString currPath = dir.path();
-	currPath = "../runtime/Bin_DEVICE";
-	QString json_cfg_file_path = currPath + "/camera_Example.json";
-
-	QJsonObject json_object;
-	try
-	{
-		QJsonParseError jsonError;
-		if (json_cfg_file_path.isEmpty())
-		{
-			qCritical() << __FUNCTION__ << " line:" << __LINE__ << " JsonPath is null!";
-			return json_object;
-		}
-
-		QFile JsonFile;
-		JsonFile.setFileName(json_cfg_file_path);
-		//if (!JsonFile.isReadable())
-		//{
-		//    qCritical() << __FUNCTION__ << " line:" << __LINE__ << " camera_Example.json not isReadable!";
-		//    //return json_object;
-		//}
-		JsonFile.open(QIODevice::ReadOnly);
-
-		QByteArray m_Byte = JsonFile.readAll();
-		if (m_Byte.isEmpty())
-		{
-			qDebug() << __FUNCTION__ << " line:" << __LINE__ << json_cfg_file_path + " Content is empty";
-			JsonFile.close();
-			return json_object;
-		}
-
-		QJsonDocument jsonDocument(QJsonDocument::fromJson(m_Byte, &jsonError));
-
-		if (!jsonDocument.isNull() && jsonError.error == QJsonParseError::NoError)
-		{
-			if (jsonDocument.isObject())
-			{
-				json_object = jsonDocument.object();
-				JsonFile.close();
-				return json_object;
-			}
-		}
-		else
-		{
-			qCritical() << __FUNCTION__ << " line:" << __LINE__ << json_cfg_file_path + " is error!";
-		}
-		JsonFile.close();
-
-	}
-	catch (QString ev)
-	{
-		qCritical() << __FUNCTION__ << " line:" << __LINE__ << " ev:" << ev;
-	}
-	return json_object;
-}
-//setParameter之后再调用，返回当前参数
-	//相机：获取默认参数；
-	//通信：获取初始化示例参数
 QMap<QString, QString> Hd_CameraModule_Basler3::parameters()
 {
-	if (ifFirst == true)
-	{
-		ifFirst = false;
-
-		moduleName = "Hd_CameraModule_Basler3#" + QString::number(id); //区别哪个相机
-
-		QJsonObject ExampleObj = load_camera_Example();
-		QJsonObject cameraObj;
-		QJsonArray  ExampleArray = ExampleObj.value("相机模块列表").toArray();
-		for (int i = 0; i < ExampleArray.size(); i++)
-		{
-			QString name = ExampleArray[i].toObject().value("模块名称").toString();
-			if (moduleName.split("#")[0] == name)
-				cameraObj = ExampleArray[i].toObject();
-		} //参数设置的数据
-		QMap<QString, QString> myParasValueMap;
-		myParasValueMap.insert("相机key", "输入SN");
-		//默认参数显示到界面
-		QJsonArray ParameterArray = cameraObj.value("相机参数").toArray();
-		for (int T = 0; T < ParameterArray.size(); T++)
-		{
-			QJsonObject ParameterObj = ParameterArray[T].toObject();
-			QString ParameterKey = ParameterObj.value("参数名").toString();
-			QString ParameterValue;
-			QJsonArray ParameterValueArray = ParameterObj.value("相机参数值").toArray();
-			for (int P = 0; P < ParameterValueArray.size(); P++)
-			{
-				if (P > 0)ParameterValue.append(",");
-				ParameterValue.append(ParameterValueArray[P].toString());
-			}
-			myParasValueMap.insert(ParameterKey, ParameterValue);
-		}
-		return myParasValueMap;
-	}
-	else return m_ParasValueMap;
+    return ParasValueMap;
 }
 
-//初始化参数；通信/相机的初始化参数
 bool Hd_CameraModule_Basler3::setParameter(const QMap<QString, QString>& ParameterMap)
 {
-	m_ParasValueMap = ParameterMap;
-	//if (m_module.moduleName.isEmpty())
-	//m_module.moduleName = getmoduleName();// = ParasValueMap.value()
-	//if(id=)
-	moduleName = "Hd_CameraModule_Basler3#" + QString::number(id);
-	return true;
+    ParasValueMap = ParameterMap;
+    //m_sdkFunc->ParasValueMap = ParasValueMap;
+    m_sdkFunc->upDateParam();
+    return true;
 }
 
-//初始化(加载模块待内存)
 bool Hd_CameraModule_Basler3::init()
 {
-	////传入initParas函数，格式为：相机key+参数名1#参数值1#参数值2+参数名2#参数值1...
-	QString initByte = m_ParasValueMap.value("相机key");
-	foreach(QString key, m_ParasValueMap.keys())
-	{
-		if (key == "相机key")
-			continue;
-		initByte += "+" + key + "#";
-		QString ParameterValue = m_ParasValueMap.value(key);
-		initByte += ParameterValue.replace(",", "#");
-	}
+    connect(this, &PbGlobalObject::trigged, [=](int Code) {
+        if (Code == 1000)
+        {
+            m_sdkFunc->Currentindex = 0;
+            m_sdkFunc->MatQueue.clear();
+            m_sdkFunc->allowflag.store(true, std::memory_order::memory_order_release);
+            emit trigged(501);
+        }
+        else if (Code == 1001)
+        {
+            m_sdkFunc->allowflag.store(false, std::memory_order::memory_order_release);
+        }
+        else if (Code == 1)
+        {
+            m_sdkFunc->triggerMode.store(1, std::memory_order::memory_order_release);
+            //m_sdkFunc->setTriggerMode(true);
+        }
+        else if (Code == 0)
+        {
+            m_sdkFunc->triggerMode.store(0, std::memory_order::memory_order_release);
+            //m_sdkFunc->setTriggerMode(false);
+        }
+        });
 
-	this->disconnect();
-	if (initParas(initByte.toLocal8Bit()))
-	{
-		qDebug() << __FUNCTION__ << " line: " << __LINE__ << " key: " << m_ParasValueMap.value("相机key") << " initParas   success! ";
-		//handdleAI3.0,重置计数，emit trigged(1000);
-		connect(this, &PbGlobalObject::trigged, [=](int Code) {
-			if (Code == 1000)
-			{
-				std::vector<cv::Mat> mat;
-				QByteArray data = "rest_newProductIn";
-				writeData(mat, data);
-			}
-			});
+    //setParameter(ParasValueMap);
+    bool flag = m_sdkFunc->initSdk(ParasValueMap);
 
-	}
-	else
-	{
-		qCritical() << __FUNCTION__ << "  line: " << __LINE__ << " moduleName: " << m_ParasValueMap.value("相机key") << " initParas failed! ";
-		return false;
-	}
-	//}
-	//else
-	//{
-	//    delete m_lib;
-	//    m_lib = nullptr;
-	//    return false;
-	//}
-	return true;
+    //if (m_sdkFunc->m_triggerSource == BASLER_TRIGGER_SOURCE_SOFTWARE)
+       // type1 = 1;
+   // else
+       // type1 = 0;
+
+    //type2 = 0;
+
+    return flag;
 }
 
-
-//设置数据
-	//相机：第一张图的参数，QStringList：00 曝光值 增益值；
-	//相机：第N张图的参数，QStringList：非00 曝光值 增益值；
 bool Hd_CameraModule_Basler3::setData(const std::vector<cv::Mat>& mats, const QStringList& data)
 {
-	//foreach(QString kidData,data)
-		//if (kidData.contains("SetExposureTime"))
-	{
-		std::vector<cv::Mat> ImgS;
-		QByteArray bData;
-		for (int i = 0; i < data.size(); i++)
-			//if(i>0)
-			//    bData +=","+ data[i].toLocal8Bit();
-			//else
-			bData += data[i].toLocal8Bit();
-		qDebug() << "Hd_CameraModule_Basler3::setData::" << bData;
-		writeData(ImgS, bData);
-		//if (m_module.module_ptr)
-		 //   m_module.module_ptr->writeData(ImgS, bData);
-		//return true;
-	}
-	//if(data.isEmpty())
-	//	return true;
-	foreach(QString kidData, data)
-		if (kidData.contains("SetExposureTime") || kidData.contains("rest_newProductIn"))
-			return true;
-	bool runResult = run(); //m_module.module_ptr->run();
-	return runResult;
+    Q_UNUSED(mats);
+    Q_UNUSED(data);
+
+    if (m_sdkFunc->m_triggerSource == BASLER_TRIGGER_SOURCE_SOFTWARE)
+    {
+        trigged(1000);
+        return m_sdkFunc->softwareTrigger();
+        //
+    }
+    return true;
 }
-//获取数据
+
 bool Hd_CameraModule_Basler3::data(std::vector<cv::Mat>& ImgS, QStringList& QStringListdata)
 {
-	//std::vector<cv::Mat> ImgS;
-	QByteArray data;
-	//m_module.module_ptr->readData(ImgS, data);
-	readData(ImgS, data);
-	if (!data.isEmpty())QStringListdata.append(byteArrayToUnicode(data));
-	return true;
+    Q_UNUSED(QStringListdata);
+
+    // 从队列中获取图像
+    m_sdkFunc->MatQueue.wait_for_pop(m_sdkFunc->timeOut, ImgS);
+    if (ImgS.empty())
+    {
+        ImgS.push_back(cv::Mat::zeros(100, 100, 0));
+        return false;
+    }
+    return true; 
+
+    // 超时或失败，尝试直接抓取一张
+    //cv::Mat img = m_sdkFunc->grabOneImage();
+    //if (!img.empty())
+    //{
+        //ImgS.push_back(img);
+        //return true;
+    //}
 }
 
-//cameraIndex，函数指针的map
-//QMap< QString, QObject*> mMap_cameraIndex_QObject;
-
-//注册回调 string对应自身的参数协议 （自定义）
-void Hd_CameraModule_Basler3::registerCallBackFun(PBGLOBAL_CALLBACK_FUN callBackFun, QObject* m_QObject, const QString& cameraIndex)
+void Hd_CameraModule_Basler3::registerCallBackFun(PBGLOBAL_CALLBACK_FUN func, QObject* parent, const QString& getString)
 {
-	n_mutex->lock();
-	myPBGLOBAL_callBack m_myPBGLOBAL_callBack;
-	m_myPBGLOBAL_callBack.callBackFun = callBackFun;
-	m_myPBGLOBAL_callBack.m_QObject = m_QObject;
-	m_myPBGLOBAL_callBack.cameraIndex = cameraIndex;
-	QQueue_myPBGLOBAL_callBack.enqueue(m_myPBGLOBAL_callBack);
-	n_mutex->unlock();
+    CallbackFuncPack_Basler TempPack;
+    TempPack.callbackparent = parent;
+    TempPack.cameraIndex = getString;
+    TempPack.GetimagescallbackFunc = func;
+    m_sdkFunc->CallbackFuncMap.insert(getString.toInt(), TempPack);
 }
-//注销回调 string对应自身的参数协议 （自定义）--->注销后还得取消连接状态
-void Hd_CameraModule_Basler3::cancelCallBackFun(PBGLOBAL_CALLBACK_FUN callBackFun, QObject* m_QObject, const QString& cameraIndex)
+
+void Hd_CameraModule_Basler3::cancelCallBackFun(PBGLOBAL_CALLBACK_FUN callBackFun, QObject* parent, const QString& getString)
 {
-	n_mutex->lock();
-	qDebug() << __FUNCTION__ << " line:" << __LINE__ << "try cancelCallBackFun";
-	for (int i = 0; i < QQueue_myPBGLOBAL_callBack.size(); i++)
-	{
-		if (QQueue_myPBGLOBAL_callBack[i].callBackFun == NULL)
-			qDebug() << __FUNCTION__ << " line:" << __LINE__ << "QQueue_myPBGLOBAL_callBack[i].callBackFun == NULL";
-		if (QQueue_myPBGLOBAL_callBack[i].m_QObject == NULL)
-			qDebug() << __FUNCTION__ << " line:" << __LINE__ << "QQueue_myPBGLOBAL_callBack[i].m_QObject == NULL";
-
-		if (QQueue_myPBGLOBAL_callBack[i].callBackFun == callBackFun &&
-			QQueue_myPBGLOBAL_callBack[i].m_QObject == m_QObject &&
-			QQueue_myPBGLOBAL_callBack[i].cameraIndex == cameraIndex)
-		{
-			qDebug() << __FUNCTION__ << " line:" << __LINE__ << "try QQueue_myPBGLOBAL_callBack.removeAt(i)";
-			QQueue_myPBGLOBAL_callBack.removeAt(i);
-			break;
-		}
-	}
-	qDebug() << __FUNCTION__ << " line:" << __LINE__ << "try cancelCallBackFun done!";
-	n_mutex->unlock();
+    int index = getString.toInt();
+    if (m_sdkFunc->CallbackFuncMap.keys().contains(index))
+    {
+        if (callBackFun == m_sdkFunc->CallbackFuncMap.value(index).GetimagescallbackFunc)
+            m_sdkFunc->CallbackFuncMap.remove(index);
+        else
+        {
+            qCritical() << "key of Values != Input Callbackfun" << getString;
+        }
+    }
 }
 
-
-//Hd_CameraModule_Basler3* create()
-//{
-//	qDebug() << "[info] " << "Hd_CameraModule_Basler3 create success!";
-//	return new Hd_CameraModule_Basler3;
-//}
-//
-//void destory(Hd_CameraModule_Basler3* ptr)
-//{
-//	if (ptr)
-//	{
-//		delete  ptr;
-//		ptr = nullptr;
-//	}
-//	qDebug() << "[info] " << "Hd_CameraModule_Basler3  destory success!";
-//}
-
-//Hd_CameraModule_Basler3::Hd_CameraModule_Basler3()
-//{
-//	PylonInitialize();
-//	n_mutex = new QMutex();
-//	m_mutex = new QMutex();
-//}
-//关闭设备
-void Hd_CameraModule_Basler3::CloseDevice()
+//=============================================================================
+// 导出函数实现
+//=============================================================================
+extern "C"
 {
-	m_camera.StopGrabbing();
-	//m_bitmapImage.Release();
+    Q_DECL_EXPORT bool create(const QString& DeviceSn, const QString& name, const QString& path)
+    {
+        if (DeviceSn.isEmpty() || name.isEmpty() || path.isEmpty())
+            return false;
 
-	//// Free the grab result, if present.
-	//m_ptrGrabResult.Release();
+        QString key = name.split(':').first();
+        if (TotalMap_Basler.keys().contains(key))
+            return true;
 
-	//// Remove the event handlers that will be called when the feature changes.
-	//m_camera.DeregisterCameraEventHandler(this, "TriggerSource");
+        OnePb_Basler temp;
+        temp.base = new Hd_CameraModule_Basler3(DeviceSn, path + "/Hd_CameraModule_Basler3/");
 
-	//m_camera.DeregisterCameraEventHandler(this, "TriggerMode");
+        if (!temp.base->init())
+        {
+            delete temp.base;
+            return false;
+        }
 
-	//m_camera.DeregisterCameraEventHandler(this, "PixelFormat");
+        temp.baseWidget = new mPrivateWidget(temp.base);
+        temp.DeviceSn = DeviceSn;
+        TotalMap_Basler.insert(key, temp);
+        return true;
+    }
 
-	//if (m_gain.IsValid())
-	//{
-	//	// If we must use the alternative integer representation, we don't know the name of the node as it defined by the camera
-	//	m_camera.DeregisterCameraEventHandler(this, m_gain.GetNode()->GetName());
-	//}
+    Q_DECL_EXPORT void destroy(const QString& name)
+    {
+        auto temp = TotalMap_Basler.take(name);
+        if (temp.base)
+        {
+            delete temp.base;
+        }
+        if (temp.baseWidget)
+        {
+            delete temp.baseWidget;
+        }
+    }
 
-	//if (m_exposureTime.IsValid())
-	//{
-	//	// If we must use the alternative integer representation, we don't know the name of the node as it defined by the camera
-	//	m_camera.DeregisterCameraEventHandler(this, m_exposureTime.GetNode()->GetName());
-	//}
+    Q_DECL_EXPORT QWidget* getCameraWidgetPtr(const QString& name)
+    {
+        if (TotalMap_Basler[name].baseWidget)
+            return TotalMap_Basler[name].baseWidget;
+        return nullptr;
+    }
 
-	//// Clear the pointers to the features we set manually in Open().
-	//m_exposureTime.Release();
-	//m_gain.Release();
+    Q_DECL_EXPORT PbGlobalObject* getCameraPtr(const QString& name)
+    {
+        if (TotalMap_Basler[name].base)
+            return TotalMap_Basler[name].base;
+        return nullptr;
+    }
 
-	// Close the camera and free all ressources.
-	// This will also unregister all 
-	m_camera.DestroyDevice();
-	m_camera.Close();
-	//delete m_camera;
-	//m_camera = nullptr;
+    Q_DECL_EXPORT QStringList getCameraSnList()
+    {
+        QStringList temp;
 
-	/*camera.StopGrabbing();
-	camera.DestroyDevice();
-	camera.Close();*/
+        if (!SearchBaslerDevice())
+            return temp;
+
+        for (size_t i = 0; i < g_deviceList.size(); i++)
+        {
+            std::string sn = g_deviceList[i].GetSerialNumber();
+            if (!sn.empty())
+                temp << QString::fromStdString(sn);
+        }
+
+        // 移除已使用的相机
+        foreach(const auto & tmp, TotalMap_Basler)
+        {
+            if (temp.contains(tmp.DeviceSn))
+            {
+                temp.removeOne(tmp.DeviceSn);
+            }
+        }
+
+        return temp;
+    }
 }
 
-//Hd_CameraModule_Basler3::~Hd_CameraModule_Basler3()
-//{
-//	ifmoduleRun = false;
-//	m_mutex->lock();
-//	CloseDevice();
-//	m_mutex->unlock();
-//	//PylonTerminate();
-//	if (m_mutex)
-//	{
-//		delete m_mutex;
-//		m_mutex = nullptr;
-//	}
-//
-//	qDebug() << "[info] " << " delete success!";
-//}
-//从类中读数据到实例对象
-bool Hd_CameraModule_Basler3::readData(std::vector<cv::Mat>& mat, QByteArray& data)
+//=============================================================================
+// mPrivateWidget 实现 - UI界面
+//=============================================================================
+mPrivateWidget::mPrivateWidget(void* handle)
 {
-	if (queuepic.isEmpty())
-	{
-		//qCritical() << "[INFO] " << " srcImage is null!";
-		return false;
-	}
-	n_mutex->lock();
-	//cv::Mat img = cv::Mat();
-	//queuepic.dequeue().copyTo(img);
-	//mat.push_back(img.clone());
-	mat.push_back(queuepic.dequeue());
-	QString qimgIndex = "imgIndex_" + QString::number(imgIndex - 1) + "_中文测试";
-	data = qimgIndex.toLocal8Bit();
-	n_mutex->unlock();
-	qDebug() << "[INFO] " << __FUNCTION__ << " line:" << __LINE__ << " checkImg readData--CameraName:" << QString::fromStdString(Username) << "--imgIndex : " << imgIndex;
-	return true;
+    m_Camerahandle = reinterpret_cast<Hd_CameraModule_Basler3*>(handle);
+    InitWidget();
+
+    // 连接图像显示信号
+    connect(this, &mPrivateWidget::sendImage, this,[=](QImage img) { m_showimage->reciveImage("", img); },Qt::QueuedConnection);
+
 }
-//实例对象把数据写入到类
-bool Hd_CameraModule_Basler3::writeData(std::vector<cv::Mat>& mat, QByteArray& data)
+
+void mPrivateWidget::showImage(cv::Mat& image)
 {
-	//2024.02.18更新，相机对应的读SN信号时，表示新产品进入，设置初始值
-	if (data == "rest_newProductIn")
-	{
-		//根据实际项目，设置初始值：曝光、增益，ROI区域等
-		{
-			if (expourseTimeList.size() > 0)
-				SetExposureTime(expourseTimeList[0]);
-			if (gainList.size() > 0)
-				SetGain(gainList[0]);
-		}
-		if (queuepic.size() > 0)
-		{
-			n_mutex->lock();
-			queuepic.clear();
-			n_mutex->unlock();
-			std::cout << "rest_newProductIn , queuePic.size() > 0 ,signal maybe too fast " << Username << std::endl;
-			qWarning() << __FUNCTION__ << "  line: " << __LINE__ << "rest_newProductIn , queuePic.size() > 0 ,signal maybe too fast " << QString::fromStdString(Username);
-		}
-		if (ifRunning == true)
-		{
-			ifBreak = true;
-			Sleep(10);
-		}
-		imgIndex = 0;
-		getImageNum = 0;
-		return true;
-	}
-
-	if (data == "ifChangeExpourseAndGain_false")
-		ifChangeExpourseAndGain = false;
-	else
-		ifChangeExpourseAndGain = true;
-	n_mutex->lock();
-	if (data.contains("SetExposureTime_"))
-	{
-		QByteArrayList dataList = data.split('#');
-		for (int i = 0; i < dataList.size(); i++)
-		{
-			if (dataList[i].contains("SetExposureTime_"))
-			{
-				int value = byteArrayToUnicode(dataList[i]).split("SetExposureTime_")[1].toInt();
-				SetExposureTime(value);
-			}
-			if (dataList[i].contains("SetGain_"))
-			{
-				double value = byteArrayToUnicode(dataList[i]).split("SetGain_")[1].toInt();
-				SetGain(value);
-			}
-			if (dataList[i].contains("TriggerMode_"))
-			{
-				QString value = byteArrayToUnicode(dataList[i]).split("TriggerMode_")[1];
-				if (value == "软触发" || value == "soft")
-					////触发模式
-				{
-					qDebug() << "SetValue TriggerSource_Software";
-					if (currentTriggerSource != Basler_UniversalCameraParams::TriggerSource_Software)
-					{
-						//触发模式
-						m_camera.TriggerSource.SetValue(Basler_UniversalCameraParams::TriggerSource_Software);
-						currentTriggerSource = Basler_UniversalCameraParams::TriggerSource_Software;
-					}
-				}
-				else if (value == "硬触发" || value == "hard")
-				{
-					qDebug() << "SetValue TriggerSource_Line1";
-					if (currentTriggerSource != Basler_UniversalCameraParams::TriggerSource_Line1)
-					{
-						m_camera.TriggerSource.SetValue(Basler_UniversalCameraParams::TriggerSource_Line1);
-						currentTriggerSource = Basler_UniversalCameraParams::TriggerSource_Line1;
-					}
-				}
-				else
-					qDebug() << "TriggerMode err ,may Chinese Name!";
-
-				Basler_UniversalCameraParams::TriggerSourceEnums nCurValue = m_camera.TriggerSource.GetValue();
-				//MV_CC_GetEnumValue(m_MyData->handle, "TriggerSource", &stEnumValue); //获取当前触发方式
-				if (currentTriggerSource != nCurValue)
-					m_camera.TriggerSource.SetValue(currentTriggerSource);
-			}
-		}
-	}
-	//调试模式下，data==ifChangeExpourseAndGain_false；非调试模式运行时，data不包含SetExposureTime_
-	else if (data != "ifChangeExpourseAndGain_false" && initTriggerSource != currentTriggerSource)
-	{
-		m_camera.TriggerSource.SetValue(initTriggerSource);
-		currentTriggerSource = initTriggerSource;
-	}
-	n_mutex->unlock();
-
-	qDebug() << "Hd_CameraModule_Basler3::writeData::" << data;
-	return true;
+    emit sendImage(cvMatToQImage(image));
 }
 
-Pylon::IIntegerEx& Hd_CameraModule_Basler3::GetExposureTime()
+void mPrivateWidget::loadCurrentParams()
 {
-	return m_exposureTime;
+    try
+    {
+        if (!m_Camerahandle->m_sdkFunc->camera 
+            || !m_Camerahandle->m_sdkFunc->camera->IsOpen())
+            return;
+
+        auto& camera = *m_Camerahandle->m_sdkFunc->camera;
+
+        if (camera.ExposureTimeAbs.IsReadable())
+        {
+            ExposureMin = camera.ExposureTimeAbs.GetMin();
+            ExposureMax = camera.ExposureTimeAbs.GetMax();
+            double curExposure = camera.ExposureTimeAbs.GetValue();
+            Exposure->setText(QString::number(curExposure, 'f', 2));
+        }
+
+        // 获取增益
+        if (camera.GainRaw.IsReadable())
+        {
+            gainMin = camera.GainRaw.GetMin();
+            gainMax = camera.GainRaw.GetMax();
+            double curGain = camera.GainRaw.GetValue();
+            gain->setText(QString::number(curGain));
+        }
+
+        // 获取伽马值
+        if (camera.Gamma.IsReadable())
+        {
+            GamaMin = camera.Gamma.GetMin();
+            GamaMax = camera.Gamma.GetMax();
+            double curGamma = camera.Gamma.GetValue();
+            Gama->setText(QString::number(curGamma, 'f', 2));
+        }
+
+        // 获取触发模式
+        if (camera.TriggerMode.IsReadable())
+        {
+            int64_t mode = camera.TriggerMode.GetValue();
+            first->setCurrentIndex(mode == 1 ? 0 : 1);
+        }
+
+        // 获取触发源
+        if (camera.TriggerSource.IsReadable())
+        {
+            
+            TriggerSourceEnums sourceEnum = camera.TriggerSource.GetValue();
+            // 匹配枚举值（注意：Basler枚举中无TriggerSource_Line0，需确认相机是否真的支持Line0）
+            if (sourceEnum == TriggerSourceEnums::TriggerSource_Action1)  // 若相机无Line0，可注释/删除此分支
+                Second->setCurrentIndex(0);
+            else if (sourceEnum == TriggerSourceEnums::TriggerSource_Line1)
+                Second->setCurrentIndex(1);
+            else if (sourceEnum == TriggerSourceEnums::TriggerSource_Line2)
+                Second->setCurrentIndex(2);
+            else if (sourceEnum == TriggerSourceEnums::TriggerSource_Software)
+                Second->setCurrentIndex(3);
+        }
+
+        // 获取像素格式
+        if (camera.PixelFormat.IsReadable())
+        {
+            PixelFormatEnums format = camera.PixelFormat.GetValue();
+           
+            if (format == PixelFormat_Mono8) pixelFormat->setCurrentIndex(0); 
+            else if (format == PixelFormat_BayerBG8) pixelFormat->setCurrentIndex(1);
+            else if (format == PixelFormat_BayerGB8) pixelFormat->setCurrentIndex(2);
+            else if (format == PixelFormat_BayerRG8) pixelFormat->setCurrentIndex(3);
+            else if (format == PixelFormat_BayerGR8) pixelFormat->setCurrentIndex(4);
+            else if (format == PixelFormat_BGR8) pixelFormat->setCurrentIndex(5);
+            else if (format == PixelFormat_RGB8) pixelFormat->setCurrentIndex(6);
+        }
+
+        // 获取帧率
+        if (camera.AcquisitionFrameRateAbs.IsReadable())
+        {
+            double fps = camera.AcquisitionFrameRateAbs.GetValue();
+            frameRate->setText(QString::number(fps, 'f', 2));
+        }
+
+        // 获取采集模式
+        if (camera.AcquisitionMode.IsReadable())
+        {
+            GenICam::gcstring mode = camera.AcquisitionMode.ToString();
+            if (mode == "Continuous") acquisitionMode->setCurrentIndex(0);
+            else if (mode == "SingleFrame") acquisitionMode->setCurrentIndex(1);
+            else if (mode == "MultiFrame") acquisitionMode->setCurrentIndex(2);
+        }
+    }
+    catch (const Pylon::GenericException& e)
+    {
+        qDebug() << "loadCurrentParams error: " << e.GetDescription();
+    }
 }
 
-Pylon::IIntegerEx& Hd_CameraModule_Basler3::GetGain()
+void mPrivateWidget::getRes(QByteArray byte)
 {
-	return m_gain;
+    MyTableWidget* button = qobject_cast<MyTableWidget*>(sender());
+    QString type = button->property("Name").toString();
+
+    if (type == "Gain")
+    {
+        BytePtr.insert("Gain", QJsonDocument::fromJson(byte).array());
+    }
+    else if (type == "ExposureTime")
+    {
+        BytePtr.insert("ExposureTime", QJsonDocument::fromJson(byte).array());
+    }
+    else if (type == "Gamma")
+    {
+        BytePtr.insert("Gamma", QJsonDocument::fromJson(byte).array());
+    }
+
+    m_AlgParmWidget->reLoadByte(QJsonDocument(BytePtr).toJson());
 }
 
-void Hd_CameraModule_Basler3::SetExposureTime(float exposureValue)
+void mPrivateWidget::InitWidget()
 {
-	qDebug() << "[INFO] " << "exposureValue:" << exposureValue;
-	//设置曝光，GigE相机为ExposureTimeRaw；USB相机为ExposureTime；方法可行,断电不保存
-	if (m_camera.ExposureTime.IsValid())
-	{
-		//m_camera.ExposureTime.GetAlternativeIntegerRepresentation(m_exposureTime);
-		//int64_t myExposureTimeRaw = m_camera.ExposureTimeRaw.GetValue();
-		//m_camera.ExposureTimeRaw.SetValue(exposureValue);
-		GetExposureTime().SetValue(exposureValue);
-	}
-	else if (m_camera.ExposureTimeRaw.IsValid())
-	{
-		//m_exposureTime.Attach(m_camera.ExposureTimeRaw.GetNode());
-		//m_camera.ExposureAuto.TrySetValue(ExposureAuto_Off);
-		//m_camera.ExposureTimeRaw.SetValue(exposureValue);
+    // 创建固定高度的标签
+    auto createLabel = [this](const QString& text, int height = 30) -> QLabel* {
+        QLabel* lbl = new QLabel(text, this);
+        lbl->setFixedHeight(height);
+        return lbl;
+        };
 
-		const int64_t minimum = GetExposureTime().GetMin();
-		const int64_t maximum = GetExposureTime().GetMax();
-		try
-		{
-			if(exposureValue> GetExposureTime().GetMin())
-				GetExposureTime().SetValue(int(exposureValue)/ minimum * minimum);
-			// Set the value in the control again in case it was altered by roundValue.
-			//pCtrl->SetPos((int)roundvalue);
-		}
-		catch (const Pylon::GenericException& e)
-		{
-			qDebug() << "Failed to set:" << GetExposureTime().GetInfo(Pylon::ParameterInfo_DisplayName).c_str() << " e." << e.GetDescription();
-			//TRACE("Failed to set '%hs':%hs", integerParameter.GetInfo(Pylon::ParameterInfo_DisplayName).c_str(), e.GetDescription());
-			//UNUSED(e);
-		}
-		catch (...)
-		{
-			qDebug() << "Failed to set:" << GetExposureTime().GetInfo(Pylon::ParameterInfo_DisplayName).c_str();
-			//TRACE("Failed to set '%hs'", integerParameter.GetInfo(Pylon::ParameterInfo_DisplayName).c_str());
-		}
+    // 创建固定高度的下拉框
+    auto createComboBox = [this](const QStringList& items, int height = 30) -> QComboBox* {
+        QComboBox* cb = new QComboBox(this);
+        cb->addItems(items);
+        cb->setFixedHeight(height);
+        return cb;
+        };
 
-		//if (GetExposureTime().IsWritable())
-		//	GetExposureTime().SetValue(30000.00);
-		Sleep(10);
-	}
+    // 创建固定高度的输入框
+    auto createLineEdit = [this](int height = 30) -> QLineEdit* {
+        QLineEdit* le = new QLineEdit(this);
+        le->setFixedHeight(height);
+        return le;
+        };
+
+    // 创建固定高度的SpinBox
+    auto createSpinBox = [this](int maxVal = 2000000, int height = 30) -> QSpinBox* {
+        QSpinBox* sb = new QSpinBox(this);
+        sb->setMaximum(maxVal);
+        sb->setFixedHeight(height);
+        return sb;
+        };
+
+    // 创建固定大小的pushbutton
+    auto createPushButton = [this](const QString& text, int width = 50, int height = 30) -> QPushButton* {
+        QPushButton* pBtn = new QPushButton(this);
+        pBtn->setText(text);
+        pBtn->setFixedHeight(height);
+        pBtn->setFixedWidth(width);
+        return pBtn;
+        };
+
+    // 创建验证器
+    auto createDoubleValidator = [this](double minVal = 0.0, double maxVal = 10000000.0, int decimals = 4) -> QDoubleValidator* {
+        QDoubleValidator* validator = new QDoubleValidator(minVal, maxVal, decimals, this);
+        validator->setNotation(QDoubleValidator::StandardNotation);
+        validator->setLocale(QLocale::C);
+        return validator;
+        };
+
+    // 创建滚动区域
+    auto createScrollArea = [this]()->QScrollArea* {
+        QScrollArea* area = new QScrollArea(this);
+        area->setObjectName("content");
+        area->setContentsMargins(0, 0, 0, 0);
+        area->setWidgetResizable(true);
+        area->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+        area->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
+        area->setFrameShape(QFrame::NoFrame);
+        return area;
+        };
+
+    // 读取配置文件
+    QFile file(m_Camerahandle->GetRootPath() + "/" + m_Camerahandle->GetSn() + ".json");
+    if (file.open(QIODevice::ReadOnly))
+    {
+        QByteArray byte = file.readAll();
+        file.close();
+        BytePtr = QJsonDocument::fromJson(byte).object();
+    }
+
+    this->setContentsMargins(0, 0, 0, 0);
+    QHBoxLayout* mainHboxLayout = new QHBoxLayout(this);
+    QVBoxLayout* MainLayout = new QVBoxLayout;
+    QGridLayout* girlayout = new QGridLayout();
+    QSplitter* Splitter = new QSplitter(Qt::Horizontal, this);
+    QVBoxLayout* AlgParmLayout = new QVBoxLayout();
+
+    // 相机参数控件创建
+    {
+        QLabel* cameraTitle = createLabel(tr("Basler相机参数设置"));
+        cameraTitle->setObjectName("titleLabel1");
+
+        QLabel* triggerModel = createLabel(tr("触发模式:"));
+        QLabel* triggerSoure = createLabel(tr("触发源:"));
+        QLabel* GammaDisableL = createLabel(tr("伽马使能"));
+        QLabel* GainL = createLabel(tr("增益(db)"));
+        QLabel* GamaL = createLabel(tr("伽马校正"));
+        QLabel* ExposureL = createLabel(tr("曝光时间(us)"));
+        QLabel* BalanceWhiteAutoL = createLabel(tr("自动白平衡"));
+        QLabel* BalanceRatioL = createLabel(tr("白平衡比"));
+        QLabel* BalanceRatioRL = createLabel(tr("R:"));
+        QLabel* BalanceRatioGL = createLabel(tr("G:"));
+        QLabel* BalanceRatioBL = createLabel(tr("B:"));
+
+        // Basler特有参数标签
+        QLabel* PixelFormatL = createLabel(tr("像素格式:"));
+        QLabel* FrameRateL = createLabel(tr("帧率(fps):"));
+        QLabel* AcquisitionModeL = createLabel(tr("采集模式:"));
+
+        BalanceRatioRL->setLayoutDirection(Qt::RightToLeft);
+
+        // 输入控件
+        gain = createLineEdit();
+        Gama = createLineEdit();
+        Exposure = createLineEdit();
+        frameRate = createLineEdit();
+
+        // 下拉框
+        first = createComboBox(QStringList() << tr("打开") << tr("关闭"));
+        Second = createComboBox(QStringList() << "Action" << "Line1" << "Line2"  << tr("软触发"));
+        GamaDisable = createComboBox(QStringList() << tr("打开") << tr("关闭"));
+        BalanceWhiteAuto = createComboBox(QStringList() << tr("关闭") << tr("一次") << tr("连续"));
+
+        // Basler特有下拉框
+        pixelFormat = createComboBox(QStringList()
+            << "Mono8" << "BayerBG8" << "BayerGB8" << "BayerRG8" << "BayerGR8"
+            << "BGR8" << "RGB8");
+        acquisitionMode = createComboBox(QStringList()
+            << "Continuous" << "SingleFrame" << "MultiFrame");
+
+        BalanceRatioR = createSpinBox(1000);
+        BalanceRatioG = createSpinBox(1000);
+        BalanceRatioB = createSpinBox(1000);
+
+        // 隐藏触发模式
+        triggerModel->hide();
+        first->hide();
+
+        BalanceRatioL->hide();
+        BalanceRatioRL->hide();
+        BalanceRatioR->hide();
+        BalanceRatioGL->hide();
+        BalanceRatioG->hide();
+        BalanceRatioBL->hide();
+        BalanceRatioB->hide();
+        BalanceWhiteAutoL->hide();
+        BalanceWhiteAuto->hide();
+        // 创建验证器
+        doubleValidator1 = createDoubleValidator(ExposureMin, ExposureMax, 2);
+        doubleValidator2 = createDoubleValidator(gainMin, gainMax, 2);
+        doubleValidator3 = createDoubleValidator(GamaMin, GamaMax, 3);
+        frameRateValidator = createDoubleValidator(0, 1000, 2);
+
+        Exposure->setValidator(doubleValidator1);
+        // gain->setValidator(doubleValidator2);
+        // Gama->setValidator(doubleValidator3);
+        frameRate->setValidator(frameRateValidator);
+
+        // 白平衡布局
+        QHBoxLayout* hbox = new QHBoxLayout();
+        hbox->addWidget(BalanceRatioRL);
+        hbox->addWidget(BalanceRatioR);
+        hbox->addWidget(BalanceRatioGL);
+        hbox->addWidget(BalanceRatioG);
+        hbox->addWidget(BalanceRatioBL);
+        hbox->addWidget(BalanceRatioB);
+        hbox->setContentsMargins(0, 0, 0, 0);
+
+        // 相机参数布局
+        int row = 0;
+        girlayout->addWidget(triggerModel, row, 0);
+        girlayout->addWidget(first, row++, 1);
+
+        girlayout->addWidget(triggerSoure, row, 0);
+        girlayout->addWidget(Second, row++, 1);
+
+        girlayout->addWidget(GainL, row, 0);
+        girlayout->addWidget(gain, row++, 1);
+
+        girlayout->addWidget(GammaDisableL, row, 0);
+        girlayout->addWidget(GamaDisable, row++, 1);
+
+        girlayout->addWidget(GamaL, row, 0);
+        girlayout->addWidget(Gama, row++, 1);
+
+        girlayout->addWidget(ExposureL, row, 0);
+        girlayout->addWidget(Exposure, row++, 1);
+
+        girlayout->addWidget(PixelFormatL, row, 0);
+        girlayout->addWidget(pixelFormat, row++, 1);
+
+        girlayout->addWidget(FrameRateL, row, 0);
+        girlayout->addWidget(frameRate, row++, 1);
+
+        girlayout->addWidget(AcquisitionModeL, row, 0);
+        girlayout->addWidget(acquisitionMode, row++, 1);
+
+        girlayout->addWidget(BalanceWhiteAutoL, row, 0);
+        girlayout->addWidget(BalanceWhiteAuto, row++, 1);
+
+        girlayout->addWidget(BalanceRatioL, row, 0);
+        girlayout->addLayout(hbox, row++, 1);
+
+
+        girlayout->setColumnStretch(0, 1);
+        girlayout->setColumnStretch(1, 2);
+        girlayout->setContentsMargins(16, 0, 8, 0);
+        girlayout->setSpacing(3);
+        girlayout->setAlignment(Qt::AlignTop);
+
+        QScrollArea* widgetCameraParamScroll = createScrollArea();
+        QWidget* widgetCameraParam = new QWidget(this);
+        QVBoxLayout* paramLayout = new QVBoxLayout();
+        widgetCameraParam->setObjectName("content");
+
+        QHBoxLayout* cameraTitleLayout = new QHBoxLayout();
+        cameraTitleLayout->addWidget(cameraTitle);
+        cameraTitleLayout->setContentsMargins(0, 0, 0, 0);
+
+        paramLayout->addLayout(cameraTitleLayout, 0);
+        paramLayout->addLayout(girlayout, 1);
+        paramLayout->setContentsMargins(0, 0, 0, 0);
+
+        widgetCameraParam->setLayout(paramLayout);
+        widgetCameraParam->setContentsMargins(0, 0, 0, 0);
+        widgetCameraParamScroll->setWidget(widgetCameraParam);
+
+        AlgParmLayout->addWidget(widgetCameraParamScroll);
+        AlgParmLayout->setContentsMargins(0, 0, 0, 0);
+    }
+
+    // 流程参数控件创建
+    {
+        QLabel* CountL = createLabel(tr("一次信号取图次数"));
+        QLabel* TimeOutL = createLabel(tr("单张图超时时间"));
+        QLabel* liucTitle = createLabel(tr("流程参数设置"));
+        liucTitle->setObjectName("titleLabel1");
+
+        Count = createSpinBox();
+        timeout = createSpinBox(10000);
+        QStackedWidget* changeWidget = new QStackedWidget(this);
+
+        saveBtn = new QPushButton(tr("保存"), this);
+        saveBtn->setMinimumHeight(30);
+        saveBtn->setObjectName("borderbutton");
+
+        // 创建表格并设置数据
+        gainTable = new MyTableWidget(this, BytePtr.value("Gain").toArray());
+        GamaTable = new MyTableWidget(this, BytePtr.value("Gamma").toArray());
+        ExposureTimeTable = new MyTableWidget(this, BytePtr.value("ExposureTime").toArray());
+
+        gainTable->setProperty("Name", "Gain");
+        GamaTable->setProperty("Name", "Gamma");
+        ExposureTimeTable->setProperty("Name", "ExposureTime");
+
+        showTable = new QTableWidget(this);
+        Add = createPushButton(tr("添加"));
+        Delete = createPushButton(tr("删除"));
+        takeEffect = createPushButton(tr("设定生效"), 110);
+
+        QLabel* tips = createLabel(tr("注意:设定生效按钮点击时,当前界面设定生效,请在未生产时操作"));
+        tips->setStyleSheet("color: rgb(255, 0, 0);");
+
+        QStringList headers;
+        headers << tr("id") << tr("Exposure") << tr("Gain") << tr("Gamma");
+        showTable->setColumnCount(headers.size());
+        showTable->setHorizontalHeaderLabels(headers);
+        showTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+        showTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+        showTable->verticalHeader()->setVisible(false);
+
+        // 设置默认值
+        Count->setValue(m_Camerahandle->m_sdkFunc->getImageMaxCoiunts);
+        timeout->setValue(m_Camerahandle->m_sdkFunc->timeOut);
+
+        // 流程参数布局
+        QGridLayout* girlayout_param = new QGridLayout();
+        girlayout_param->addWidget(TimeOutL, 0, 0);
+        girlayout_param->addWidget(timeout, 0, 1);
+        girlayout_param->addWidget(CountL, 1, 0);
+        girlayout_param->addWidget(Count, 1, 1);
+        girlayout_param->setColumnStretch(0, 1);
+        girlayout_param->setColumnStretch(1, 2);
+        girlayout_param->setContentsMargins(16, 8, 0, 0);
+        girlayout_param->setSpacing(3);
+
+        QHBoxLayout* btnLayout = new QHBoxLayout();
+        btnLayout->addStretch();
+        btnLayout->addWidget(takeEffect);
+        btnLayout->addWidget(Add);
+        btnLayout->addWidget(Delete);
+        btnLayout->setContentsMargins(16, 20, 0, 0);
+
+        QScrollArea* widgetLiucScroll = createScrollArea();
+        QWidget* widgetLiuc = new QWidget(this);
+        widgetLiuc->setObjectName("content");
+        widgetLiuc->setContentsMargins(0, 0, 0, 0);
+
+        QVBoxLayout* vLayout = new QVBoxLayout();
+        QHBoxLayout* liucTitleLayout = new QHBoxLayout();
+        liucTitleLayout->addWidget(liucTitle);
+
+        vLayout->addLayout(liucTitleLayout, 0);
+        vLayout->addLayout(girlayout_param, 1);
+        vLayout->addLayout(btnLayout);
+        vLayout->addWidget(showTable);
+        vLayout->addWidget(changeWidget);
+        vLayout->addWidget(tips);
+        vLayout->addWidget(saveBtn);
+        vLayout->setContentsMargins(0, 8, 8, 8);
+        vLayout->setSpacing(3);
+
+        widgetLiuc->setLayout(vLayout);
+        widgetLiucScroll->setWidget(widgetLiuc);
+        AlgParmLayout->addWidget(widgetLiucScroll);
+        AlgParmLayout->setSpacing(6);
+
+        changeWidget->addWidget(gainTable);
+        changeWidget->addWidget(GamaTable);
+        changeWidget->addWidget(ExposureTimeTable);
+        changeWidget->setContentsMargins(8, 0, 0, 0);
+        changeWidget->hide();
+    }
+
+    // 参数json显示界面
+    {
+        m_AlgParmWidget = new AlgParmWidget(m_Camerahandle->GetRootPath() + "/" + m_Camerahandle->GetSn() + ".json");
+        m_AlgParmWidget->hide();
+    }
+
+    // 图片显示界面
+    {
+        SetDataBtn = createPushButton(tr("软触发"), 100);
+        ContinuesBtn = createPushButton(tr("连续取图"), 100);
+        Details = createPushButton(tr("详情"), 100);
+        Details->hide();
+
+        m_showimage = new viewWidget();
+        m_showimage->setMinimumSize(500, 500);
+        QLabel* title = createLabel("Basler相机");
+
+        QHBoxLayout* MainBtnLayout = new QHBoxLayout;
+        MainBtnLayout->addWidget(title);
+        MainBtnLayout->addStretch();
+        MainBtnLayout->addWidget(ContinuesBtn);
+        MainBtnLayout->addWidget(SetDataBtn);
+        MainBtnLayout->addWidget(Details);
+
+        MainLayout->addLayout(MainBtnLayout);
+        MainLayout->addWidget(m_showimage);
+    }
+
+    // 连接相机图像回调
+    auto func = std::bind(&mPrivateWidget::showImage, this, std::placeholders::_1);
+    m_Camerahandle->m_sdkFunc->registerGetImageFun(func);
+    // 设置分割器
+    QWidget* mainLayoutWidget = new QWidget(Splitter);
+    mainLayoutWidget->setLayout(MainLayout);
+
+    AlgParmLayout->setStretch(0, 2);
+    AlgParmLayout->setStretch(1, 5);
+
+    QWidget* algParmLayoutWidget = new QWidget(Splitter);
+    algParmLayoutWidget->setLayout(AlgParmLayout);
+    algParmLayoutWidget->setContentsMargins(0, 0, 0, 0);
+
+    Splitter->addWidget(mainLayoutWidget);
+    Splitter->addWidget(algParmLayoutWidget);
+    Splitter->addWidget(m_AlgParmWidget);
+
+    QList<int> ratios;
+    ratios << 4 << 3 << 0;
+    int totalRatio = 7;
+
+    QTimer::singleShot(10, this, [=]() {
+        int totalWidth = Splitter->width();
+        QList<int> splitterSizes;
+        for (int ratio : ratios) {
+            int size = (totalWidth * ratio) / totalRatio;
+            splitterSizes << size;
+        }
+        Splitter->setSizes(splitterSizes);
+        });
+
+    Splitter->setContentsMargins(0, 0, 0, 0);
+    mainHboxLayout->addWidget(Splitter);
+    mainHboxLayout->setContentsMargins(0, 0, 0, 0);
+
+    // 加载当前参数
+    loadCurrentParams();
+
+    // 初始化表格
+    gainTable->initData();
+    GamaTable->initData();
+    ExposureTimeTable->initData();
+
+    // 创建信号连接
+    createConnect();
 }
 
-void Hd_CameraModule_Basler3::SetGain(float GainValue)
+void mPrivateWidget::createConnect()
 {
-	qDebug() << "[INFO] " << "GainValue:" << GainValue;
-	//线扫相机，设置增益有问题
-	//设置增益，GigE相机为GainRaw；USB相机为Gain
-	if (m_camera.Gain.IsValid())
-	{
-		//m_camera.Gain.GetAlternativeIntegerRepresentation(m_gain);
-		//m_camera.Gain.SetValue(GainValue);
-		GetGain().SetValue(GainValue);
-	}
-	else if (m_camera.GainRaw.IsValid())
-	{
-		//m_gain.Attach(m_camera.GainRaw.GetNode());
-		//m_camera.GainRaw.SetValue(GainValue);
-		//GetGain().SetValue(GainValue);
-		const int64_t minimum = GetExposureTime().GetMin();
-		const int64_t maximum = GetExposureTime().GetMax();
+    // 触发模式
+    connect(first, &QComboBox::currentTextChanged, this, [=](QString text) {
+        bool on = (text == tr("打开"));
+        m_Camerahandle->m_sdkFunc->setTriggerMode(on);
+        m_Camerahandle->trigged(on ? 1 : 0);
 
-		try
-		{
-			if (GainValue >= minimum && GainValue <= maximum)
-				GetGain().SetValue(GainValue);
-			// Set the value in the control again in case it was altered by roundValue.
-			//pCtrl->SetPos((int)roundvalue);
-		}
-		catch (const Pylon::GenericException& e)
-		{
-			qDebug() << "Failed to set:" << GetGain().GetInfo(Pylon::ParameterInfo_DisplayName).c_str() << " e." << e.GetDescription();
-			//TRACE("Failed to set '%hs':%hs", integerParameter.GetInfo(Pylon::ParameterInfo_DisplayName).c_str(), e.GetDescription());
-			//UNUSED(e);
-		}
-		catch (...)
-		{
-			qDebug() << "Failed to set:" << GetGain().GetInfo(Pylon::ParameterInfo_DisplayName).c_str();
-			//TRACE("Failed to set '%hs'", integerParameter.GetInfo(Pylon::ParameterInfo_DisplayName).c_str());
-		}
-	}
+        //m_Camerahandle->m_sdkFunc->grabOneImage();
+        });
+
+    // 触发源
+    connect(Second, &QComboBox::currentTextChanged, this, [=](const QString& text) {
+        int source = BASLER_TRIGGER_SOURCE_ACTION;
+        if (text == "Action") source = BASLER_TRIGGER_SOURCE_ACTION;
+        else if (text == "Line1") source = BASLER_TRIGGER_SOURCE_LINE1;
+        else if (text == "Line2") source = BASLER_TRIGGER_SOURCE_LINE2;
+        else if (text == tr("软触发")) source = BASLER_TRIGGER_SOURCE_SOFTWARE;
+
+        m_Camerahandle->m_sdkFunc->setTriggerSource(source);
+        //m_Camerahandle->type1 = (source == BASLER_TRIGGER_SOURCE_SOFTWARE) ? 1 : 0;
+        });
+
+    // 连续取图按钮
+    connect(ContinuesBtn, &QPushButton::clicked, this, [=]() {
+        if (ContinuesBtn->text() == tr("连续取图"))
+        {
+            first->setCurrentIndex(1);
+            ContinuesBtn->setText(tr("停止取图"));
+            SetDataBtn->setEnabled(false);
+
+        }
+        else
+        {
+            first->setCurrentIndex(0);
+            ContinuesBtn->setText(tr("连续取图"));
+            SetDataBtn->setEnabled(true);
+        }
+        });
+
+    // 增益设置
+    connect(gain, &QLineEdit::editingFinished, this, [=]() {
+        m_Camerahandle->m_sdkFunc->setGain(gain->text().toInt());
+        });
+
+    // 伽马设置
+    connect(Gama, &QLineEdit::editingFinished, this, [=]() {
+        m_Camerahandle->m_sdkFunc->setGamma(float(Gama->text().toFloat()));
+        });
+
+    // 曝光时间设置
+    connect(Exposure, &QLineEdit::editingFinished, this, [=]() {
+        m_Camerahandle->m_sdkFunc->setExposureTime(float(Exposure->text().toFloat()));
+        });
+
+    // 像素格式设置
+    connect(pixelFormat, &QComboBox::currentTextChanged, this, [=](const QString& text) {
+        m_Camerahandle->m_sdkFunc->setPixelFormat(text);
+        });
+
+    // 帧率设置
+    connect(frameRate, &QLineEdit::editingFinished, this, [=]() {
+        try
+        {
+            auto& camera = *m_Camerahandle->m_sdkFunc->camera;
+            if (camera.IsOpen() && camera.AcquisitionFrameRateAbs.IsWritable())
+            {
+                camera.AcquisitionFrameRateAbs.SetValue(frameRate->text().toDouble());
+            }
+        }
+        catch (const Pylon::GenericException& e)
+        {
+            qDebug() << "Set frame rate error: " << e.GetDescription();
+        }
+        });
+
+    // 采集模式设置
+    connect(acquisitionMode, &QComboBox::currentTextChanged, this, [=](const QString& text) {
+        m_Camerahandle->m_sdkFunc->setAcquisitionMode(text);
+        });
+
+    // 伽马使能
+    connect(GamaDisable, &QComboBox::currentTextChanged, this, [=](const QString& text) {
+        try
+        {
+            auto& camera = *m_Camerahandle->m_sdkFunc->camera;
+            if (!camera.IsOpen()) return;
+
+            bool enable = (text == tr("打开"));
+            if (camera.GammaEnable.IsWritable())
+            {
+                camera.GammaEnable.SetValue(enable);
+            }
+        }
+        catch (const Pylon::GenericException& e)
+        {
+            qDebug() << "Set gamma enable error: " << e.GetDescription();
+        }
+        });
+
+    // 白平衡设置
+    connect(BalanceWhiteAuto, &QComboBox::currentTextChanged, this, [=](const QString& text) {
+        try
+        {
+            auto& camera = *m_Camerahandle->m_sdkFunc->camera;
+            if (!camera.IsOpen() || !camera.BalanceWhiteAuto.IsWritable())
+                return;
+
+            if (text == tr("关闭"))
+            {
+                camera.BalanceWhiteAuto.SetValue(Basler_UniversalCameraParams::BalanceWhiteAuto_Off);
+                BalanceRatioR->setEnabled(true);
+                BalanceRatioG->setEnabled(true);
+                BalanceRatioB->setEnabled(true);
+
+                if (camera.BalanceRatioSelector.IsWritable())
+                {
+                    camera.BalanceRatioSelector.SetValue(Basler_UniversalCameraParams::BalanceRatioSelector_Red);
+                    BalanceRatioR->setValue((int)camera.BalanceRatio.GetValue());
+
+                    camera.BalanceRatioSelector.SetValue(Basler_UniversalCameraParams::BalanceRatioSelector_Green);
+                    BalanceRatioG->setValue((int)camera.BalanceRatio.GetValue());
+
+                    camera.BalanceRatioSelector.SetValue(Basler_UniversalCameraParams::BalanceRatioSelector_Blue);
+                    BalanceRatioB->setValue((int)camera.BalanceRatio.GetValue());
+                }
+            }
+            else if (text == tr("一次"))
+            {
+                camera.BalanceWhiteAuto.SetValue(Basler_UniversalCameraParams::BalanceWhiteAuto_Once);
+                BalanceRatioR->setEnabled(false);
+                BalanceRatioG->setEnabled(false);
+                BalanceRatioB->setEnabled(false);
+            }
+            else if (text == tr("连续"))
+            {
+                camera.BalanceWhiteAuto.SetValue(Basler_UniversalCameraParams::BalanceWhiteAuto_Continuous);
+                BalanceRatioR->setEnabled(false);
+                BalanceRatioG->setEnabled(false);
+                BalanceRatioB->setEnabled(false);
+            }
+        }
+        catch (const Pylon::GenericException& e)
+        {
+            qDebug() << "Set white balance error: " << e.GetDescription();
+        }
+        });
+
+    // 白平衡比值设置
+    connect(BalanceRatioR, &QSpinBox::editingFinished, this, [=]() {
+        try
+        {
+            auto& camera = *m_Camerahandle->m_sdkFunc->camera;
+            if (camera.IsOpen() && camera.BalanceRatioSelector.IsWritable())
+            {
+                camera.BalanceRatioSelector.SetValue(Basler_UniversalCameraParams::BalanceRatioSelector_Red);
+                camera.BalanceRatio.SetValue(BalanceRatioR->value());
+            }
+        }
+        catch (const Pylon::GenericException& e)
+        {
+            qDebug() << "Set red balance error: " << e.GetDescription();
+        }
+        });
+
+    connect(BalanceRatioG, &QSpinBox::editingFinished, this, [=]() {
+        try
+        {
+            auto& camera = *m_Camerahandle->m_sdkFunc->camera;
+            if (camera.IsOpen() && camera.BalanceRatioSelector.IsWritable())
+            {
+                camera.BalanceRatioSelector.SetValue(Basler_UniversalCameraParams::BalanceRatioSelector_Green);
+                camera.BalanceRatio.SetValue(BalanceRatioG->value());
+            }
+        }
+        catch (const Pylon::GenericException& e)
+        {
+            qDebug() << "Set green balance error: " << e.GetDescription();
+        }
+        });
+
+    connect(BalanceRatioB, &QSpinBox::editingFinished, this, [=]() {
+        try
+        {
+            auto& camera = *m_Camerahandle->m_sdkFunc->camera;
+            if (camera.IsOpen() && camera.BalanceRatioSelector.IsWritable())
+            {
+                camera.BalanceRatioSelector.SetValue(Basler_UniversalCameraParams::BalanceRatioSelector_Blue);
+                camera.BalanceRatio.SetValue(BalanceRatioB->value());
+            }
+        }
+        catch (const Pylon::GenericException& e)
+        {
+            qDebug() << "Set blue balance error: " << e.GetDescription();
+        }
+        });
+
+    // 软触发按钮
+    connect(SetDataBtn, &QPushButton::clicked, this, [=]() {
+        std::vector<cv::Mat> mats;
+        QStringList list;
+        //emit m_Camerahandle->trigged(1000);
+        //m_Camerahandle->m_sdkFunc->grabOneImage();
+        m_Camerahandle->setData(mats, list);
+        m_Camerahandle->data(mats, list);
+        if (!mats.empty())
+        {
+            QImage showImg = cvMatToQImage(mats.at(0));
+            m_showimage->reciveImage("", showImg);
+        }
+        
+
+        });
+
+    // JSON参数修改
+    connect(m_AlgParmWidget, &AlgParmWidget::SengCurrentByte, this, [=](QByteArray byte) {
+        QJsonObject paramObj = QJsonDocument::fromJson(byte).object();
+        QMap<QString, QString> ParameterMap;
+        for (auto objStr : paramObj.keys())
+        {
+            if (paramObj.value(objStr).isString())
+                ParameterMap.insert(objStr, paramObj.value(objStr).toString());
+            else if (paramObj.value(objStr).isArray())
+            {
+                m_Camerahandle->m_sdkFunc->setArrayByte(objStr, paramObj.value(objStr).toArray());
+            }
+        }
+        m_Camerahandle->setParameter(ParameterMap);
+        });
+
+    // 流程参数修改
+    connect(Count, &QSpinBox::editingFinished, this, [=]() {
+        int currentValue = Count->value();
+        m_Camerahandle->m_sdkFunc->getImageMaxCoiunts = currentValue;
+        m_Camerahandle->m_sdkFunc->ParasValueMap["OnceSignalsGetImageCounts"] = QString::number(currentValue);
+        BytePtr["OnceSignalsGetImageCounts"] = QString::number(currentValue);
+        m_AlgParmWidget->reLoadByte(QJsonDocument(BytePtr).toJson());
+        });
+
+    connect(timeout, &QSpinBox::editingFinished, this, [=]() {
+        int currentValue = timeout->value();
+        m_Camerahandle->m_sdkFunc->timeOut = currentValue;
+        m_Camerahandle->m_sdkFunc->ParasValueMap["GetOnceImageTimes"] = QString::number(currentValue);
+        BytePtr["GetOnceImageTimes"] = QString::number(currentValue);
+        m_AlgParmWidget->reLoadByte(QJsonDocument(BytePtr).toJson());
+        });
+
+    // 表格数据变化连接
+    connect(gainTable, &MyTableWidget::SendCurrentResult, this, &mPrivateWidget::getRes);
+    connect(GamaTable, &MyTableWidget::SendCurrentResult, this, &mPrivateWidget::getRes);
+    connect(ExposureTimeTable, &MyTableWidget::SendCurrentResult, this, &mPrivateWidget::getRes);
+
+    // 保存按钮
+    connect(saveBtn, &QPushButton::clicked, this, [=]() {
+        if (m_AlgParmWidget)
+            emit m_AlgParmWidget->save();
+        });
+
+    // 设定生效按钮
+    connect(takeEffect, &QPushButton::clicked, this, [=]() {
+        auto clickMyTableTakeEffectButton = [](MyTableWidget* tableWidget) {
+            if (!tableWidget) return;
+            QToolButton* takeEffectBtn = tableWidget->getTakeEffectButton();
+            if (takeEffectBtn) {
+                QMouseEvent pressEvent(QEvent::MouseButtonPress, takeEffectBtn->rect().center(),
+                    Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+                QApplication::sendEvent(takeEffectBtn, &pressEvent);
+                QMouseEvent releaseEvent(QEvent::MouseButtonRelease, takeEffectBtn->rect().center(),
+                    Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+                QApplication::sendEvent(takeEffectBtn, &releaseEvent);
+            }
+            };
+        clickMyTableTakeEffectButton(ExposureTimeTable);
+        clickMyTableTakeEffectButton(gainTable);
+        clickMyTableTakeEffectButton(GamaTable);
+        });
+
+    // 添加行
+    connect(Add, &QPushButton::clicked, this, [=]() {
+        auto createCenteredItem = [](const QString& text) -> QTableWidgetItem* {
+            QTableWidgetItem* item = new QTableWidgetItem(text);
+            item->setTextAlignment(Qt::AlignHCenter | Qt::AlignVCenter);
+            return item;
+            };
+
+        int row = showTable->rowCount();
+        showTable->insertRow(row);
+        showTable->setItem(row, 0, createCenteredItem(""));
+        showTable->setItem(row, 1, createCenteredItem(""));
+        showTable->setItem(row, 2, createCenteredItem(""));
+        showTable->setItem(row, 3, createCenteredItem(""));
+
+        auto clickMyTableAddButton = [](MyTableWidget* tableWidget) {
+            if (!tableWidget) return;
+            QToolButton* addBtn = tableWidget->getAddRowButton();
+            if (addBtn) {
+                QMouseEvent pressEvent(QEvent::MouseButtonPress, addBtn->rect().center(),
+                    Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+                QApplication::sendEvent(addBtn, &pressEvent);
+                QMouseEvent releaseEvent(QEvent::MouseButtonRelease, addBtn->rect().center(),
+                    Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+                QApplication::sendEvent(addBtn, &releaseEvent);
+            }
+            };
+
+        clickMyTableAddButton(ExposureTimeTable);
+        clickMyTableAddButton(gainTable);
+        clickMyTableAddButton(GamaTable);
+        });
+
+    // 删除行
+    connect(Delete, &QPushButton::clicked, this, [=]() {
+        QItemSelectionModel* selectionModel = showTable->selectionModel();
+        QSet<int> selectedRows;
+        QModelIndexList selectedIndexes = selectionModel->selectedIndexes();
+        foreach(QModelIndex index, selectedIndexes) {
+            if (index.isValid()) {
+                selectedRows.insert(index.row());
+            }
+        }
+
+        if (selectedRows.isEmpty()) return;
+
+        QList<int> rows = selectedRows.values();
+        std::sort(rows.begin(), rows.end(), std::greater<int>());
+
+        for (int row : rows) {
+            ExposureTimeTable->removeTableRow(row);
+            gainTable->removeTableRow(row);
+            GamaTable->removeTableRow(row);
+            showTable->removeRow(row);
+        }
+        });
+
+    // 表格单元格编辑
+    connect(showTable, &QTableWidget::cellDoubleClicked, this, [=](int row, int col) {
+        if (col != 1 && col != 2 && col != 3) return;
+        QTableWidgetItem* item = showTable->item(row, col);
+        if (item) {
+            cellOriginalValues[QPair<int, int>(row, col)] = item->text().trimmed();
+        }
+        });
+
+    connect(showTable, &QTableWidget::cellChanged, this, [=](int row, int col) {
+        auto validateTableCell = [](const QString& text, QDoubleValidator* validator) -> bool {
+            if (!validator) return true;
+            if (text.isEmpty()) return true;
+            int pos = 0;
+            return validator->validate(const_cast<QString&>(text), pos) == QValidator::Acceptable;
+            };
+
+        QTableWidgetItem* item = showTable->item(row, col);
+        if (!item) return;
+
+        QString text = item->text().trimmed();
+
+        if (col != 0)
+        {
+            bool isValid = true;
+            switch (col) {
+            case 1:
+                isValid = validateTableCell(text, doubleValidator1);
+                break;
+            case 2:
+                isValid = validateTableCell(text, doubleValidator2);
+                break;
+            case 3:
+                isValid = validateTableCell(text, doubleValidator3);
+                break;
+            default:
+                return;
+            }
+
+            if (!isValid) {
+                QString originalValue = cellOriginalValues.value(QPair<int, int>(row, col), "");
+                QMessageBox::warning(this, tr("输入非法"),
+                    tr("合法范围：%1 ~ %2")
+                    .arg(col == 1 ? ExposureMin : (col == 2 ? gainMin : GamaMin))
+                    .arg(col == 1 ? ExposureMax : (col == 2 ? gainMax : GamaMax)));
+                item->setText(originalValue);
+                item->setTextAlignment(Qt::AlignHCenter | Qt::AlignVCenter);
+                return;
+            }
+
+            cellOriginalValues[QPair<int, int>(row, col)] = text;
+
+            if (col == 1)
+                ExposureTimeTable->setItemData(row, 1, text);
+            else if (col == 2)
+                gainTable->setItemData(row, 1, text);
+            else if (col == 3)
+                GamaTable->setItemData(row, 1, text);
+        }
+        else
+        {
+            bool isInt = false;
+            text.toInt(&isInt);
+            if (!isInt && !text.isEmpty())
+            {
+                QString originalValue = cellOriginalValues.value(QPair<int, int>(row, col), "");
+                QMessageBox::warning(this, tr("输入非法"), tr("请输入整数"));
+                item->setText(originalValue);
+                return;
+            }
+
+            ExposureTimeTable->setItemData(row, 0, text);
+            gainTable->setItemData(row, 0, text);
+            GamaTable->setItemData(row, 0, text);
+        }
+        });
+
+    // 表格行添加信号
+    connect(ExposureTimeTable, &MyTableWidget::addNewLine, this, [=](int row, int col, QString value) {
+        showTable->blockSignals(true);
+        int rowCount = showTable->rowCount();
+        if (rowCount < row + 1) showTable->setRowCount(row + 1);
+        QTableWidgetItem* item = new QTableWidgetItem(value);
+        item->setTextAlignment(Qt::AlignHCenter | Qt::AlignVCenter);
+        showTable->setItem(row, col, item);
+        showTable->blockSignals(false);
+        });
+
+    connect(gainTable, &MyTableWidget::addNewLine, this, [=](int row, int col, QString value) {
+        showTable->blockSignals(true);
+        int rowCount = showTable->rowCount();
+        if (rowCount < row + 1) showTable->setRowCount(row + 1);
+        QTableWidgetItem* item = new QTableWidgetItem(value);
+        item->setTextAlignment(Qt::AlignHCenter | Qt::AlignVCenter);
+        if (col != 0)
+            showTable->setItem(row, col + 1, item);
+        showTable->blockSignals(false);
+        });
+
+    connect(GamaTable, &MyTableWidget::addNewLine, this, [=](int row, int col, QString value) {
+        showTable->blockSignals(true);
+        int rowCount = showTable->rowCount();
+        if (rowCount < row + 1) showTable->setRowCount(row + 1);
+        QTableWidgetItem* item = new QTableWidgetItem(value);
+        item->setTextAlignment(Qt::AlignHCenter | Qt::AlignVCenter);
+        if (col != 0)
+            showTable->setItem(row, col + 2, item);
+        showTable->blockSignals(false);
+        });
 }
-
-//传入initParas函数，格式为：相机key+参数名1#参数值1#参数值2+参数名2#参数值1...
-bool Hd_CameraModule_Basler3::initParas(QByteArray& initData)
-{
-	QByteArrayList valueList = initData.split('+');
-	Username = valueList[0];
-
-	getImageNum = 0;
-	expourseTimeList.clear();
-	gainList.clear();
-
-	bool ifOk = true;
-	if (ifInit == false)//(m_camera == nullptr)
-		ifOk = ConnctDevice();
-	if (ifOk == false)
-	{
-		qDebug() << "try connctDevice again!" << QString::fromStdString(Username);
-		ifOk = ConnctDevice();
-	}
-	if (ifOk == false)
-		return false;
-	ifInit = true;
-	if (valueList.size() > 1)
-		for (int i = 1; i < valueList.size(); i++)
-		{
-			QString valuei = byteArrayToUnicode(valueList[i]);
-			//valuei.prepend(valueList[i]);
-			if (valuei.contains("expourseTime"))
-			{
-				QStringList expourseTimeL = valuei.split('#');
-				if (expourseTimeL.size() > 1)
-					for (int j = 1; j < expourseTimeL.size(); j++)
-						expourseTimeList.enqueue(expourseTimeL[j].toFloat());
-			}
-			if (valuei.contains("gain"))
-			{
-				QStringList gainL = valuei.split('#');
-				if (gainL.size() > 1)
-					for (int j = 1; j < gainL.size(); j++)
-						gainList.enqueue(gainL[j].toFloat());
-			}
-
-			if (valuei.contains("是否为标准通信流程"))
-			{
-				if (valuei.contains("true"))
-					ifStandard = true;
-			}
-			if (valuei.contains("取图超时") || valuei.contains("getImageTimeOut"))
-			{
-				QStringList gainL = valuei.split('#');
-				if (gainL.size() > 1)
-					getImageTimeOut = gainL[1].toInt();
-				if (getImageTimeOut < 50)
-					getImageTimeOut = 1000;
-			}
-			
-			if (valuei.contains("触发方式") || valuei.contains("TriggerMode"))
-			{
-				QStringList valueL = valuei.split('#');
-				if (valueL.size() > 1)
-					if (valueL[1].toInt() >= 0)
-						if (valueL[1] == "软触发" || valueL[1] == "soft")
-						{
-							//触发模式
-							m_camera.TriggerSource.SetValue(Basler_UniversalCameraParams::TriggerSource_Software);
-							currentTriggerSource = Basler_UniversalCameraParams::TriggerSource_Software;
-							initTriggerSource = Basler_UniversalCameraParams::TriggerSource_Software;
-						}
-						else if (valueL[1] == "硬触发" || valueL[1] == "hard")
-						{
-							m_camera.TriggerSource.SetValue(Basler_UniversalCameraParams::TriggerSource_Line1);
-							currentTriggerSource = Basler_UniversalCameraParams::TriggerSource_Line1;
-							initTriggerSource = Basler_UniversalCameraParams::TriggerSource_Line1;
-						}
-			}
-		}
-	imgIndex = 0;
-	
-	if (ifOk == true)
-	{
-		if (expourseTimeList.size() > 0)
-			SetExposureTime(expourseTimeList[0]);
-		if (gainList.size() > 0)
-			SetGain(gainList[0]);
-	}
-
-	getImageNum = 0;
-	return ifOk;
-}
-
-bool Hd_CameraModule_Basler3::run()
-{
-	bool result = false; 
-	ifGetImage = false;
-	ifRunning = true;
-	ifBreak = false;
-	//srcImage.release();
-	try
-	{
-		m_mutex->lock();
-
-		/*if (!m_camera.IsGrabbing())
-		{
-			m_mutex->unlock();
-			return result;
-		}*/
-
-		//软触发一次
-		// Only wait if software trigger is currently turned on.
-		if (m_camera.TriggerSource.GetValue() == Basler_UniversalCameraParams::TriggerSource_Software
-			&& m_camera.TriggerMode.GetValue() == Basler_UniversalCameraParams::TriggerMode_On)
-		{
-			// If the camera is currently processing a previous trigger command,
-			// it will silently discard trigger commands.
-			// We wait until the camera is ready to process the next trigger.
-			if (moduleStatus == false)
-			{
-				m_mutex->unlock(); 
-				return result;
-			}
-			if (m_camera.WaitForFrameTriggerReady(3000, Pylon::TimeoutHandling_ThrowException) == true)
-			{
-				// Send trigger
-				m_camera.ExecuteSoftwareTrigger();
-			}
-			else {
-				m_mutex->unlock();
-				return result;
-			}
-		}
-		else {
-			m_mutex->unlock();
-			return result;
-		}
-		m_mutex->unlock();
-
-		int mytime = 0;
-		while (true)
-		{
-			if (moduleStatus == false || mytime++ > getImageTimeOut || ifBreak == true)
-			{
-				result = false;
-				break;
-			}
-			n_mutex->lock();
-			if (queuepic.size() > 0)
-			{
-				n_mutex->unlock();
-				result = true;
-				break;
-			}
-			n_mutex->unlock();
-			Sleep(1);
-		}
-		//软触发，不考虑误触发、漏触发
-		if (ifChangeExpourseAndGain == true)
-		{
-			getImageNum++;
-			if (expourseTimeList.size() > 1 && expourseTimeList[getImageNum % expourseTimeList.size()] != expourseTimeList[(getImageNum - 1) % expourseTimeList.size()])
-				SetExposureTime(expourseTimeList[getImageNum % expourseTimeList.size()]);
-			if (gainList.size() > 1 && gainList[getImageNum % gainList.size()] != gainList[(getImageNum - 1) % gainList.size()])
-				SetGain(gainList[getImageNum % gainList.size()]);
-		}
-	}
-	catch (...)
-	{
-		qDebug() << "[error] " << " Hd_CameraModule_Basler3:" ;
-	}
-	return result;
-}
-//相机连接状态：正常连接或断开
-bool Hd_CameraModule_Basler3::checkStatus()
-{
-	//m_mutex->lock();
-	//status = modulestatus;
-	return moduleStatus;
-	//m_mutex->unlock();
-}
-

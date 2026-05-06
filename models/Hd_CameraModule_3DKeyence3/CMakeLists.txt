@@ -3,7 +3,7 @@ get_filename_component(CURRENT_FOLDER ${CMAKE_CURRENT_SOURCE_DIR} NAME)
 string(TIMESTAMP RUN_TIME)
 message( " model start : " ${CURRENT_FOLDER}:${RUN_TIME})
 
-set(DLL_NAMES "keyence3D" "opencv")
+set(DLL_NAMES "keyence3D" "opencv" )
 foreach(child ${DLL_NAMES})         
     LIST(APPEND ENV_INCLUDE ${${child}_include})
     LIST(APPEND ENV_LIB ${${child}_lib})
@@ -25,7 +25,7 @@ link_directories (
 
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
-SET(CMAKE_CXX_STANDARD 11)
+SET(CMAKE_CXX_STANDARD 17)
 SET(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_AUTOMOC ON)

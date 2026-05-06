@@ -36,7 +36,7 @@ public:
 	void upDateParam();
     bool setArrayByte(QString Key, QJsonArray);
     void* handle = nullptr;//相机句柄
-    ThreadSafeQueue<std::vector<cv::Mat>> MatQueue;
+    ThreadSafeQueue<QList<cv::Mat>> MatQueue;
     QMap<int,CallbackFuncPack> CallbackFuncMap;
     std::atomic_bool allowflag;
     int Currentindex = 0;
@@ -52,7 +52,7 @@ public:
     int timeOut = 1000;
     MV_CAM_TRIGGER_SOURCE m_MV_CAM_TRIGGER_SOURCE;//触发方式
     // std::atomic_int triggerMode = 0;//触发模式 0关闭 1打开
-    std::atomic_int triggerMode{0};//触发模式 0关闭 1打开
+    std::atomic_int triggerMode{1};//触发模式 0关闭 1打开
     void registerGetImageFun(GetImageFun fun) { triggerOffBack = fun; }
     GetImageFun triggerOffBack;
 signals:

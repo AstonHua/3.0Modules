@@ -57,7 +57,7 @@ int main(int argc, char* argv[])
 	//QCoreApplication::addLibraryPath("./");
 	//loadDLLWithWindowsAPI();
 	//QTextCodec::setCodecForLocale(QTextCodec::codecForName("UTF-8"));
-	QLibrary* m_lib = new QLibrary("./Hd_CameraModule_HIK3.dll");
+	QLibrary* m_lib = new QLibrary("./Hd_CameraModule_3DKeyence3.dll");
 	bool flag = m_lib->load();
 	if (!m_lib->isLoaded())
 	{
@@ -85,21 +85,12 @@ int main(int argc, char* argv[])
 				//bool flag = ptr->init();
 				centerwidget = getCameraWidget(list.first());
 				qDebug() << flag;
-				//DataDealWithPtr = createFun();
-				//if (CommunicationPtr)
-				{
-					//DataDealWithPtr->CommunicationPtr = CommunicationPtr;
-				}
-				//return DataDealWithPtr->initParas(QJsonDocument(obj.toObject().value("初始化数据").toObject()).toJson());
 			}
 		}
 		catch (const std::exception&)
 		{
 			std::cout << "Exception occurred while loading function." << std::endl;
-		}
-
-		//ReleaseFunction releaseFun = (ReleaseFunction)m_lib->resolve("destory");
-		
+		}		
 	}
 
 

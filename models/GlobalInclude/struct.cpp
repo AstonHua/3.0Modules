@@ -1,4 +1,4 @@
-#include "struct.h"
+﻿#include "struct.h"
 extern QImage cvMatToQImage(const cv::Mat& src)
 {
 
@@ -166,4 +166,31 @@ QString byteArrayToUnicode(const QByteArray array) {
 		text = QTextCodec::codecForName("GBK")->toUnicode(array);
 	}
 	return text;
+}
+
+bool JsonWriter::write(const QString& filePath, const QJsonObject& jsonObject, bool pretty)
+{
+	QFile file(filePath);
+	if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+		qWarning() << "无法打开文件写入：" << filePath << "，错误：" << file.errorString();
+		return false;
+	}
+
+	QJsonDocument doc(jsonObject);
+	QByteArray data = pretty ? doc.toJson(QJsonDocument::Indented) : doc.toJson(QJsonDocument::Compact);
+
+	if (file.write(data) == -1) {
+		qWarning() << "写入文件失败：" << filePath;
+		file.close();
+		return false;
+	}
+
+	file.close();
+	return true;
+}
+
+bool JsonWriter::write(const QString& filePath, const QVariantMap& variantMap, bool pretty)
+{
+	QJsonObject jsonObject = QJsonObject::fromVariantMap(variantMap);
+	return write(filePath, jsonObject, pretty);
 }

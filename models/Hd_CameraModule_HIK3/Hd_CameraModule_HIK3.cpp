@@ -41,6 +41,8 @@ bool connctDevice(string GetSnName, void* handle, void* pUser)
     if (!SearchDevice())
         return false;
     int index = 0;
+    bool findflad = false;
+
     for (; index < m_stDevList.nDeviceNum; index++)
     {
 
@@ -49,12 +51,17 @@ bool connctDevice(string GetSnName, void* handle, void* pUser)
         //unsigned char* name=m_stDevList.pDeviceInfo[i]->SpecialInfo.stGigEInfo.chUserDefinedName;
         string SnName = static_cast<string>((LPCSTR)name);
         if (SnName == GetSnName)
+        {
+            findflad = true;
             break;
 
+        }
     }
+    if (!findflad)
+		return false;
     unsigned char* name = m_stDevList.pDeviceInfo[index]->SpecialInfo.stGigEInfo.chUserDefinedName;
     string userName = static_cast<string>((LPCSTR)name);
-    qDebug() << "[INFO] " << " start" << "--UserName:" << QString::fromStdString(userName);
+    qDebug() << "--UserName:" << QString::fromStdString(userName);
     if (handle != NULL)
     {
         MV_CC_StopGrabbing(handle);
@@ -85,7 +92,6 @@ bool connctDevice(string GetSnName, void* handle, void* pUser)
         return false;
     MV_CC_StartGrabbing(handle);
     CurrentCamera->handle = std::move(handle);
-    qDebug() << "pUser0" << CurrentCamera;
     return true;
 }
 
@@ -120,7 +126,7 @@ void __stdcall ImageCallBackEx(unsigned char* pData0, MV_FRAME_OUT_INFO_EX* pFra
     double time_Start = (double)clock();
     int frameNum = 0;
     cv::Mat srcImage = cv::Mat();
-    std::vector<cv::Mat> OutMats;
+    QList<cv::Mat> OutMats;
     CameraFunSDKfactoryCls* CurrentCamera = (CameraFunSDKfactoryCls*)(pUser0);
     qDebug() << CurrentCamera << pUser0;
     if (pFrameInfo0)
@@ -203,12 +209,16 @@ void __stdcall ImageCallBackEx(unsigned char* pData0, MV_FRAME_OUT_INFO_EX* pFra
         }
         else
         {
-            qDebug() << CurrentCamera->Currentindex;
+            qDebug() << CurrentCamera->Currentindex<<"图像数量"<< OutMats.size();
             ///硬触发不受开关控制，没有缓存
             if (CurrentCamera->CallbackFuncMap.keys().contains(CurrentCamera->Currentindex))
             {
                 QObject* obj = CurrentCamera->CallbackFuncMap.value(CurrentCamera->Currentindex).callbackparent;
                 obj->setProperty("cameraIndex", QString::number(CurrentCamera->Currentindex));
+                //QDateTime curT = QDateTime::currentDateTime();
+				//QString imageName = curT.toString("hh_mm_ss_zzz") + "_" + QString::number(CurrentCamera->Currentindex) + "_" + QString::number(pFrameInfo0->nFrameNum);
+				//cv::imwrite(QString(CurrentCamera->RootPath + imageName + ".jpg").toStdString(), srcImage);
+
                 CurrentCamera->CallbackFuncMap.value(CurrentCamera->Currentindex).GetimagescallbackFunc(obj, OutMats);
             }
             else
@@ -221,14 +231,17 @@ void __stdcall ImageCallBackEx(unsigned char* pData0, MV_FRAME_OUT_INFO_EX* pFra
     if (CurrentCamera->exposureTimeMap.count(CurrentCamera->Currentindex) == 1)
     {
         MV_CC_SetFloatValue(CurrentCamera->handle, "ExposureTime", CurrentCamera->exposureTimeMap[CurrentCamera->Currentindex]);
+		qDebug() << "ExposureTime" << CurrentCamera->exposureTimeMap[CurrentCamera->Currentindex];
     }
     if (CurrentCamera->gainMap.count(CurrentCamera->Currentindex) == 1)
     {
         MV_CC_SetFloatValue(CurrentCamera->handle, "Gain", CurrentCamera->gainMap[CurrentCamera->Currentindex]);
+		qDebug() << "Gain" << CurrentCamera->gainMap[CurrentCamera->Currentindex];
     }
     if (CurrentCamera->gammaMap.count(CurrentCamera->Currentindex) == 1)
     {
         MV_CC_SetFloatValue(CurrentCamera->handle, "Gamma", CurrentCamera->gammaMap[CurrentCamera->Currentindex]);
+		qDebug() << "Gamma" << CurrentCamera->gammaMap[CurrentCamera->Currentindex];
     }
     if (CurrentCamera->Currentindex >= CurrentCamera->getImageMaxCoiunts / CurrentCamera->OnceGetImageNum)	CurrentCamera->Currentindex = 0;
 
@@ -273,6 +286,7 @@ void CameraFunSDKfactoryCls::upDateParam()
     qDebug() << getImageMaxCoiunts << OnceGetImageNum;
     return;
 }
+
 bool CameraFunSDKfactoryCls::setArrayByte(QString Key, QJsonArray array)
 {
     if (Key == "ExposureTime")
@@ -379,20 +393,22 @@ bool Hd_CameraModule_HIK3::init()
             m_sdkFunc->MatQueue.clear();
             m_sdkFunc->allowflag.store(true, std::memory_order::memory_order_release);
             emit trigged(501);
+           
         }
         else if (Code == 1001)
         {
             m_sdkFunc->allowflag.store(false, std::memory_order::memory_order_release);
         }
-        else if (Code == 1)
+        else if (Code == 11)
         {
             m_sdkFunc->triggerMode.store(1, std::memory_order::memory_order_release);
 
         }
-        else if (Code == 0)
+        else if (Code == 10)
         {
             m_sdkFunc->triggerMode.store(0, std::memory_order::memory_order_release);
         }
+        qDebug() << "捕获到信号" << Code;
     });
     setParameter(ParasValueMap);
     bool flag = m_sdkFunc->initSdk(ParasValueMap);
@@ -401,7 +417,7 @@ bool Hd_CameraModule_HIK3::init()
     else if (m_sdkFunc->m_MV_CAM_TRIGGER_SOURCE < 4)
         type1 = 0;
     type2 = 0;//不需要需要触发器，出图完成后给plc信号即可
-    //qDebug() << m_sdkFunc->handle;
+
     qDebug() << "SDKFUNC" << m_sdkFunc;
     return flag;
 }
@@ -421,12 +437,19 @@ bool Hd_CameraModule_HIK3::setData(const std::vector<cv::Mat>& mats, const QStri
 bool Hd_CameraModule_HIK3::data(std::vector<cv::Mat>& ImgS, QStringList& QStringListdata)
 {
 
-    m_sdkFunc->MatQueue.wait_for_pop(m_sdkFunc->timeOut, ImgS);
-    if (ImgS.empty())
+	QList<cv::Mat> takenMats;
+    m_sdkFunc->MatQueue.wait_for_pop(m_sdkFunc->timeOut, takenMats);
+
+	
+    if (takenMats.empty())
     {
         ImgS.push_back(cv::Mat::zeros(100, 100, 0));
         qCritical() << __FUNCTION__ << "   line:" << __LINE__ << " srcImage is null";
         return false;
+    }
+    else
+    {
+        ImgS.push_back(takenMats.last());
     }
     return true;
 }
@@ -935,7 +958,7 @@ void mPrivateWidget::createConnect()
 {
     connect(first, &QComboBox::currentTextChanged, this, [=](QString text) {
         int mode = (text == tr("打开")) ? MV_TRIGGER_MODE_ON : MV_TRIGGER_MODE_OFF;
-        int flag = (text == tr("打开")) ? 1 : 0;
+        int flag = (text == tr("打开")) ? 11 : 10;
         MV_CC_SetEnumValue(m_Camerahandle->m_sdkFunc->handle, "TriggerMode", mode);
         m_Camerahandle->trigged(flag);
     });
@@ -1051,7 +1074,7 @@ void mPrivateWidget::createConnect()
     connect(SetDataBtn, &QPushButton::clicked, this, [=]() {
         std::vector<cv::Mat> mats;
         QStringList list;
-        emit m_Camerahandle->trigged(1000);
+       // emit m_Camerahandle->trigged(1000);
         m_Camerahandle->setData(mats, list);
         m_Camerahandle->data(mats, list);
         cv::Mat tempMat = mats.at(0);
@@ -1082,7 +1105,7 @@ void mPrivateWidget::createConnect()
         }
         m_Camerahandle->setParameter(ParameterMap);
     });
-
+	emit m_AlgParmWidget->SengCurrentByte(QJsonDocument(BytePtr).toJson());
     connect(GamaDisable, &QComboBox::currentTextChanged, this, [=](const QString& text) {
         int nRet = 0;
         if (text == tr("打开")) {

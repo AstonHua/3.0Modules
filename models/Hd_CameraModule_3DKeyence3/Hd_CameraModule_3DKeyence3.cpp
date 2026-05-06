@@ -463,7 +463,6 @@ bool Hd_CameraModule_3DKeyence3::setData(const std::vector<cv::Mat>& mats, const
 			emit trigged(501);
 			return true;
 		}
-
 		else
 		{
 			qWarning() << "LJX8IF_StartMeasure start error" << errCode;
@@ -503,10 +502,7 @@ bool CameraFunSDKfactoryCls::InitHighSpeed()
 			qWarning() << __FUNCTION__ << "  line: " << __LINE__ << " profileInfo_ptr is null! ";
 		}
 		errCode = LJX8IF_InitializeHighSpeedDataCommunicationSimpleArray(deviceId, &_ethernetConfig[deviceId], HighSpeedPortNo, &myCallbackFunc, yImageSize, deviceId); // 初始化高速通讯
-		//qDebug() << __FUNCTION__ << " line:" << __LINE__ << "   errCode:" << errCode;
 		errCode = LJX8IF_PreStartHighSpeedDataCommunication(deviceId, startReq_ptr[deviceId], profileInfo_ptr[deviceId]);// 预开始启动高速通信，作用 做预连接
-		//qDebug() << __FUNCTION__ << " line:" << __LINE__ << "   errCode:" << errCode;
-
 		// zUnit
 		errCode = LJX8IF_GetZUnitSimpleArray(deviceId, &zUnit);
 		if (errCode != 0 || zUnit == 0)
@@ -514,7 +510,7 @@ bool CameraFunSDKfactoryCls::InitHighSpeed()
 			qCritical() << __FUNCTION__ << "  line:" << __LINE__ << " Failed to acquire zunit! ";
 			return false;
 		}
-		errCode = LJX8IF_StartHighSpeedDataCommunication(deviceId);           // 正式开始高速通讯
+		errCode = LJX8IF_StartHighSpeedDataCommunication(deviceId);//正式开始高速通讯
 		qDebug() << __FUNCTION__ << " line:" << __LINE__ << " errCode: " << errCode;
 	}
 	catch (const QString ev)
@@ -641,13 +637,18 @@ QStringList getCameraSnList()
 		EthernetConfig.abyIpAddress[2] = str.split('.').at(2).toInt();
 		EthernetConfig.abyIpAddress[3] = str.split('.').at(3).toInt();
 		EthernetConfig.wPortNo = 24691;
+		
 		int errCode = LJX8IF_EthernetOpen(index, &EthernetConfig);
 		if (errCode == 0)
 		{
 			resVec.push_back(str);
 			if (resVec.size() >= MAX_LJXA_DEVICENUM) break;
 			index++;
+		}
+		else
+		{
 			qDebug() << __FUNCTION__ << " line:" << __LINE__ << "  Open device ! errCode:" << errCode;
+
 		}
 	}
 	for (int o = 0; o < resVec.size(); o++)
@@ -656,9 +657,6 @@ QStringList getCameraSnList()
 		{
 			char pControllerSerialNo[20]; char pHeadSerialNo[20];
 			LJX8IF_GetSerialNumber(o, pControllerSerialNo, pHeadSerialNo);
-			//qDebug() << sizeof(pControllerSerialNo);
-			//if (sizeof(pControllerSerialNo)!=20 || sizeof(pControllerSerialNo) != 20)
-				//continue;
 			qDebug() << "Get Device" << "index" << o << "\t" << "pControllerSerialNo" << pControllerSerialNo << "pHeadSerialNo" << pHeadSerialNo;
 			QPair<QString, QString> tempPair;
 			tempPair.first = pHeadSerialNo;

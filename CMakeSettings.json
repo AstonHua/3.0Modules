@@ -24,12 +24,12 @@
       "variables": [
         {
           "name": "CMAKE_CXX_FLAGS_RELEASE",
-          "value": "/Zi /O2 /Ob2 /DNDEBUG",
+          "value": "",
           "type": "STRING"
         },
         {
           "name": "CMAKE_EXE_LINKER_FLAGS_RELEASE",
-          "value": "/debug /INCREMENTAL",
+          "value": "",
           "type": "STRING"
         },
         {
@@ -39,7 +39,7 @@
         },
         {
           "name": "CMAKE_SHARED_LINKER_FLAGS_RELEASE",
-          "value": "/debug /INCREMENTAL",
+          "value": "",
           "type": "STRING"
         }
       ]

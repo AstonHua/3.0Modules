@@ -3,7 +3,7 @@ get_filename_component(CURRENT_FOLDER ${CMAKE_CURRENT_SOURCE_DIR} NAME)
 string(TIMESTAMP RUN_TIME)
 message( " model start : " ${CURRENT_FOLDER}:${RUN_TIME})
 
-set(DLL_NAMES "basler" "opencv")
+set(DLL_NAMES "basler" "opencv" "DMessageBox")
 foreach(child ${DLL_NAMES})         
     LIST(APPEND ENV_INCLUDE ${${child}_include})
     LIST(APPEND ENV_LIB ${${child}_lib})
@@ -22,10 +22,11 @@ include_directories(
 link_directories (
     ${ENV_LIB}
     )
-
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /Od /Zi")
+set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} /Od /Zi")
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
-SET(CMAKE_CXX_STANDARD 11)
+SET(CMAKE_CXX_STANDARD 17)
 SET(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_AUTOMOC ON)
@@ -39,7 +40,6 @@ FILE(GLOB GSRC_FILES "${CMAKE_GLOBAL_INCLUDE_DIRECTORY}/*.cpp")
 LIST(APPEND SRC_FILES ${GSRC_FILES})
 FILE(GLOB GHEAD_FILES "${CMAKE_GLOBAL_INCLUDE_DIRECTORY}/*.h")
 LIST(APPEND HEAD_FILES ${GHEAD_FILES})
-
 #find_package(Qt5 COMPONENTS Core REQUIRED)
 find_package(QT NAMES Qt6 Qt5 COMPONENTS Core REQUIRED)
 find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Core REQUIRED)
@@ -48,7 +48,7 @@ add_library(${CURRENT_FOLDER} SHARED
     ${HEAD_FILES}
     ${SRC_FILES}
     ${UI_FILES}
-    )
+     )
 
 
 

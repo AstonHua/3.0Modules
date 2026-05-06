@@ -29,7 +29,7 @@ struct CallbackFuncPack
     PBGLOBAL_CALLBACK_FUN GetimagescallbackFunc;
     QString cameraIndex;
 };
-class cameraFunSDKfactoryCls;
+class CameraFunSDKfactoryCls;
 class  Hd_25DCameraVJ_module :public PbGlobalObject
 {
     Q_OBJECT
@@ -45,7 +45,7 @@ public:
     bool data(std::vector<cv::Mat>&, QStringList&);
     //注册回调 string对应自身的参数协议 （自定义）
     void registerCallBackFun(PBGLOBAL_CALLBACK_FUN, QObject*, const QString&);
-
+    void cancelCallBackFun(PBGLOBAL_CALLBACK_FUN, QObject*, const QString&);
 
 private://inside
     QString SnCode;
@@ -54,7 +54,7 @@ private://inside
 private:
     QMap<QString, QString> ParasValueMap;
  
-    cameraFunSDKfactoryCls* m_sdkFunc = nullptr;
+    CameraFunSDKfactoryCls* m_sdkFunc = nullptr;
 
 private:
 
@@ -78,7 +78,7 @@ public:
 
 };
 
-class cameraFunSDKfactoryCls :public QObject
+class CameraFunSDKfactoryCls :public QObject
 {
     Q_OBJECT;
 public:
@@ -87,17 +87,16 @@ public:
     KglGenParameterArray* kgllFeatureNodes = nullptr;
     KglGenParameterArray* kgllStreamFeatureNodes = nullptr;
     LocalKglDeviceEventSink* ab = nullptr;
-    KglBuffer* kglBuffer = nullptr;
 public:
-    cameraFunSDKfactoryCls(QString sn,QString RootPath);
-    ~cameraFunSDKfactoryCls();
+    CameraFunSDKfactoryCls(QString sn,QString RootPath);
+    ~CameraFunSDKfactoryCls();
     void upDateParam();
     bool initSdk(QMap<QString, QString>& insideValuesMaps);
     bool setParamMap(const QMap<QString, QString>& ParasValueMap);
     bool Connect(string name);
     void Disconnect();
     void getPictureThread();
-    bool AcquisitionStartEx_SingleFrame(bool bMultiCaptureUpdateImage, std::string sMultiCaptureImageType, cv::Mat& result);
+    bool AcquisitionStartEx_SingleFrame(bool bMultiCaptureUpdateImage, std::string sMultiCaptureImageType, std::vector<cv::Mat>& matVec);
     void setFeatureNodes(const std::string sFeatureName, const int64_t value);
     void setIntegerValue(const std::string sFeatureName, const int64_t value);
     void setFloatValue(const std::string sFeatureName, const double value);
@@ -115,11 +114,10 @@ public:
     void ConvertRGBA8toBGRA8(void* buffer, int pixelSize);
     bool AcquisitionStart();
     void AcquisitionStop();
-    bool QueueBuffer();
-    cv::Mat RetrieveBuffer(std::string imagetype);
-    void SaveBMP(cv::Mat bmp);
+    bool QueueBuffer(KglBuffer* kglBuffer);
+    cv::Mat RetrieveBuffer(KglBuffer* kglBuffer, cv::Mat& bmpMat);
     bool TriggerSoftware();
-    QVector<CallbackFuncPack> CallbackFuncVec;
+    QMap<int, CallbackFuncPack> CallbackFuncMap;
 public:
     int MaxTimeOut = 1000;
     QString RootPath;

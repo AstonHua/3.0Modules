@@ -14,6 +14,7 @@ AlgParmWidget::AlgParmWidget(QString Path):currentFilePath(Path)
 	QByteArray byte = file.readAll();
 	file.close();
 	init(byte);
+
 }
 
 AlgParmWidget::~AlgParmWidget()

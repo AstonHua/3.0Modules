@@ -3,9 +3,8 @@
 
 #include <QObject>
 #include<opencv2/opencv.hpp>
-#include <opencv.hpp>
 
-typedef void (*PBGLOBAL_CALLBACK_FUN)(QObject*, const std::vector<cv::Mat>&);
+typedef void (*PBGLOBAL_CALLBACK_FUN)(QObject*, const QList<cv::Mat>&);
 class PbGlobalObject : public QObject
 {
     Q_OBJECT
