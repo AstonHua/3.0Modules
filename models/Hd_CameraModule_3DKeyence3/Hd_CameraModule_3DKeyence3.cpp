@@ -260,7 +260,7 @@ void myCallbackFunc(LJX8IF_PROFILE_HEADER* pProfileHeaderArray, WORD* pHeightPro
 			cv::Mat heightMat = cv::Mat(tempsdk->yImageSize, xDatasize, CV_16UC1, heightBuf);
 			if (tempsdk->use_external_batchStart > 0)
 			{
-				vector<cv::Mat> GetimageVector;
+				QList<cv::Mat> GetimageVector;
 				int realIndex = tempsdk->Currentindex * tempsdk->OnceGetImageNum;
 				if (dwLuminanceEnable == 1)//需要判断是否开启亮度图输出
 				{
@@ -626,30 +626,86 @@ QStringList getCameraSnList()
 {
 	QStringList temp;
 	QVector<QString > resVec;
-	QStringList list = getConnectedDevicesFromARP();
-	int index = 0;
-	TotalSnIpVec.clear();
-	for (auto str : list)
+	bool isfileReaded = false;
+	if (QFile("./3DKeyence/Ip.txt").exists())//先查询本地文件，如果没有再通过网络查询，后续可以优化成定时查询网络并更新本地文件
 	{
-		LJX8IF_ETHERNET_CONFIG EthernetConfig;
-		EthernetConfig.abyIpAddress[0] = str.split('.').at(0).toInt();
-		EthernetConfig.abyIpAddress[1] = str.split('.').at(1).toInt();
-		EthernetConfig.abyIpAddress[2] = str.split('.').at(2).toInt();
-		EthernetConfig.abyIpAddress[3] = str.split('.').at(3).toInt();
-		EthernetConfig.wPortNo = 24691;
-		
-		int errCode = LJX8IF_EthernetOpen(index, &EthernetConfig);
-		if (errCode == 0)
+		QFile file("./3DKeyence/Ip.txt");
+		if (file.open(QIODevice::ReadOnly | QIODevice::Text))
 		{
-			resVec.push_back(str);
-			if (resVec.size() >= MAX_LJXA_DEVICENUM) break;
-			index++;
+			QTextStream in(&file);
+			while (!in.atEnd())
+			{
+				QString line = in.readLine();
+				if (!line.isEmpty())
+					resVec.push_back(line);
+			}
+			file.close();
+			isfileReaded = true;
+			if (resVec.isEmpty())//如果文件存在但没有内容，说明之前查询网络没有找到设备，直接搜索网络
+			{
+				isfileReaded = false;
+				goto getFromNet;
+			}		
 		}
 		else
 		{
-			qDebug() << __FUNCTION__ << " line:" << __LINE__ << "  Open device ! errCode:" << errCode;
-
+			qCritical() << "Failed to open Ip.txt for reading.";
+			//return temp;
 		}
+
+	}
+	else
+	{
+	getFromNet:
+		QDir().mkpath("./3DKeyence/");
+		QStringList list = getConnectedDevicesFromARP();
+		int index = 0;
+		TotalSnIpVec.clear();
+		for (auto str : list)
+		{
+			LJX8IF_ETHERNET_CONFIG EthernetConfig;
+			EthernetConfig.abyIpAddress[0] = str.split('.').at(0).toInt();
+			EthernetConfig.abyIpAddress[1] = str.split('.').at(1).toInt();
+			EthernetConfig.abyIpAddress[2] = str.split('.').at(2).toInt();
+			EthernetConfig.abyIpAddress[3] = str.split('.').at(3).toInt();
+			EthernetConfig.wPortNo = 24691;
+
+			int errCode = LJX8IF_EthernetOpen(index, &EthernetConfig);//尝试打开设备，打开成功说明设备存在且是基恩士3D相机
+			if (errCode == 0)
+			{
+				resVec.push_back(str);
+				if (resVec.size() >= MAX_LJXA_DEVICENUM) break;
+				index++;
+			}
+			else
+			{
+				qDebug() << __FUNCTION__ << " line:" << __LINE__ << "  Open device ! errCode:" << errCode;
+
+			}
+		}
+	}
+
+	if (!isfileReaded)//不是从文件读取的才需要写文件，后续优化成定时查询网络并更新本地文件
+	{
+		if (resVec.empty())//如果网络上没有找到设备，文件也没有，直接返回空列表,防止每次查询网络都写一次文件，导致误判
+		{
+			qCritical() << "No devices found on the network.";
+			return temp;
+		}
+		QFile file("./3DKeyence/Ip.txt");
+		if (file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate))
+		{
+			QTextStream out(&file);
+			for (const auto& ip : resVec)
+			{
+				out << ip << "\n";
+			}
+			file.close();
+		}
+	}
+	else
+	{
+		qCritical() << "Failed to open Ip.txt for writing.";
 	}
 	for (int o = 0; o < resVec.size(); o++)
 	{

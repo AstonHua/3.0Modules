@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <imageView.h>
 #include <QTableWidget>
 #include <QDir>

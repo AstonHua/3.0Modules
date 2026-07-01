@@ -100,8 +100,8 @@ public:
     void setFeatureNodes(const std::string sFeatureName, const int64_t value);
     void setIntegerValue(const std::string sFeatureName, const int64_t value);
     void setFloatValue(const std::string sFeatureName, const double value);
-    void setBooleanValue(const std::string sFeatureName, const bool value);
-    void setEnumValue(const std::string sFeatureName, std::string value);
+    bool setBooleanValue(const std::string sFeatureName, const bool value);
+    bool setEnumValue(const std::string sFeatureName, std::string value);
     void setStringValue(const std::string sFeatureName, const std::string);
     void executeCommand(const std::string sFeatureName);
     void getIntegerValue(const std::string sFeatureName, int64_t& value);
@@ -114,7 +114,7 @@ public:
     void ConvertRGBA8toBGRA8(void* buffer, int pixelSize);
     bool AcquisitionStart();
     void AcquisitionStop();
-    bool QueueBuffer(KglBuffer* kglBuffer);
+    bool QueueBuffer(KglBuffer*& kglBuffer);
     cv::Mat RetrieveBuffer(KglBuffer* kglBuffer, cv::Mat& bmpMat);
     bool TriggerSoftware();
     QMap<int, CallbackFuncPack> CallbackFuncMap;
@@ -130,12 +130,12 @@ public:
     std::string sModelName;
     std::string snName;
     std::shared_ptr<ThreadSafeQueue<std::vector<Mat>>> MatVecQueue;
-    std::string xmlPath = "./CA-HL08MX_9E710040_Features.xml";
-    std::thread getpicturethread;
-	bool ThreadRunningflag = false;
+   // std::string xmlPath = "./CA-HL08MX_9E710040_Features.xml";
+    //std::thread getpicturethread;
+	//bool ThreadRunningflag = false;
     bool bBGEnable = false;
-    std::atomic_bool allowflag;
-    std::atomic_bool stopbit = false;
+    std::atomic_bool allowflag =true;
+   // std::atomic_bool stopbit = false;
     bool isBufferCapturestart = false;
 signals:
     void trigged(int);

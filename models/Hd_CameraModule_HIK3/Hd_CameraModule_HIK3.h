@@ -38,7 +38,9 @@ public:
     void* handle = nullptr;//相机句柄
     ThreadSafeQueue<QList<cv::Mat>> MatQueue;
     QMap<int,CallbackFuncPack> CallbackFuncMap;
-    std::atomic_bool allowflag;
+    std::atomic_bool allowflag{true};
+     int IntNumEvent = 0;
+     int IntNumCallback = 0;
     int Currentindex = 0;
     string Username;
     string SnCode;

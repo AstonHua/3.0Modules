@@ -222,7 +222,7 @@ void CameraFunSDKfactoryCls::onImageGrabbed(CInstantCamera& cam, const CGrabResu
 {
     if (!ptrGrabResult->GrabSucceeded())
         return;
-    std::vector<cv::Mat> Outmats;
+   QList<cv::Mat> Outmats;
     CameraFunSDKfactoryCls* currentUser = this;
     // 3. 转换为Mat（已有逻辑）
     cv::Mat srcImage = convertToMat(ptrGrabResult);
@@ -342,7 +342,7 @@ void CameraFunSDKfactoryCls::checkCameraHealth()
 cv::Mat CameraFunSDKfactoryCls::grabOneImage()
 {
     cv::Mat img;
-    std::vector<cv::Mat> out;
+   QList<cv::Mat> out;
     try
     {
         if (!camera || !camera->IsGrabbing())
@@ -794,12 +794,14 @@ bool Hd_CameraModule_Basler3::data(std::vector<cv::Mat>& ImgS, QStringList& QStr
     Q_UNUSED(QStringListdata);
 
     // 从队列中获取图像
-    m_sdkFunc->MatQueue.wait_for_pop(m_sdkFunc->timeOut, ImgS);
-    if (ImgS.empty())
+    QList<cv::Mat> out;
+    m_sdkFunc->MatQueue.wait_for_pop(m_sdkFunc->timeOut, out);
+    if (out.isEmpty())
     {
         ImgS.push_back(cv::Mat::zeros(100, 100, 0));
         return false;
     }
+    ImgS = out.toVector().toStdVector();
     return true; 
 
     // 超时或失败，尝试直接抓取一张

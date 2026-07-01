@@ -13,7 +13,8 @@ const QByteArray FirstCreateByte(R"({"DeviceId": "0",
   "y_pitch_um": "20.0",
   "OnceSignalsGetImageCounts": "20",
 "OnceImageCounts":"2",
-"triggedType":"1"})");
+"triggedType":"1",
+"FirstState":"false"})");
 
 #define SYSTEMGO GoSystemOnceExplem::getInstance()->getsystem1()//
 #define SYSTEMAPI GoSystemOnceExplem::getInstance()->getkAssembly()//初始化SDKapi
@@ -114,11 +115,12 @@ kStatus kCall onData(void* ctx, void* sys, void* dataset)
 				memcpy(ptr, data, sizeof(short) * Width);
 			}
 			image.convertTo(image, CV_16UC1, 1.0, 32768);
-			//if (Data->allowflag.load(std::memory_order::memory_order_acquire))
+			if (Data->allowflag.load(std::memory_order::memory_order_acquire))
 			{
 				if (Data->triggedType == 0)
 				{
-					vector<cv::Mat> Getimagevector;
+					
+					QList<cv::Mat> Getimagevector;
 					int realIndex = Data->Currentindex * 2;
 					realIndex++;
 					Getimagevector.push_back(image.clone());
@@ -163,11 +165,11 @@ kStatus kCall onData(void* ctx, void* sys, void* dataset)
 					memcpy(ptr, data, Width);
 				}
 			}
-			//if (Data->allowflag.load(std::memory_order::memory_order_acquire))
+			if (Data->allowflag.load(std::memory_order::memory_order_acquire))
 			{
 				if (Data->triggedType == 0)
 				{
-					vector<cv::Mat> Getimagevector;
+					QList<cv::Mat> Getimagevector;
 					int realIndex = Data->Currentindex * 2;
 					Getimagevector.push_back(image.clone());
 					if (Data->CallbackFuncMap.keys().contains(realIndex))
@@ -192,7 +194,7 @@ kStatus kCall onData(void* ctx, void* sys, void* dataset)
 		}
 
 
-		//if (Data->allowflag.load(std::memory_order::memory_order_acquire))
+		if (Data->allowflag.load(std::memory_order::memory_order_acquire))
 		{
 			if (Data->triggedType == 1)
 			{
@@ -447,10 +449,12 @@ bool Hd_CameraModule_3DLMI3::init()
 			m_sdkFunc->Currentindex = 0;
 			m_sdkFunc->ImageMats.clear();
 			m_sdkFunc->allowflag.store(true, std::memory_order::memory_order_release);
+			emit trigged(501);
 		}
 		else if (Code == 1001)
 		{
 			m_sdkFunc->allowflag.store(false, std::memory_order::memory_order_release);
+			emit trigged(501);
 		}
 		});
 
@@ -471,11 +475,11 @@ bool Hd_CameraModule_3DLMI3::init()
 
 	if (m_sdkFunc->triggedType > 0)
 	{
-		type1 = 0;
+		type1 = 1;//软触发
 	}
 	else
 	{
-		type1 = 1;
+		type1 = 0;//硬触发
 	}
 
 	qDebug() << SnName;
@@ -772,6 +776,7 @@ void CameraFunSDKfactoryCls::upDateParam()
 	getImageMaxCoiunts = ParasValueMap.value("OnceSignalsGetImageCounts").toInt();
 	OnceGetImageNum = ParasValueMap.value("OnceImageCounts").toInt();
 	timeOut = ParasValueMap.value("GetOnceImageTimes").toInt();
+	allowflag = ParasValueMap.value("FirstState") == "true" ? true : false;
 	return;
 }
 

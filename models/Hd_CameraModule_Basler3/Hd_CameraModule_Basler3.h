@@ -111,7 +111,7 @@ public:
     void onImageGrabbed(CInstantCamera& cam, const CGrabResultPtr& ptrGrabResult);
     // 成员变量
     CBaslerUniversalInstantCamera* camera = nullptr;
-    ThreadSafeQueue<std::vector<cv::Mat>> MatQueue;
+    ThreadSafeQueue<QList<cv::Mat>> MatQueue;
     QMap<int, CallbackFuncPack_Basler> CallbackFuncMap;
     std::atomic_bool allowflag;
     int Currentindex = 0;

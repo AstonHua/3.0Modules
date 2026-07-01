@@ -177,6 +177,9 @@ if(ON)
                 elseif(${child} MATCHES "dahua")
                     SET( ${child}_target_link 
                         "MVSDKmd" )
+                elseif(${child} MATCHES "Dalsa")
+                    SET( ${child}_target_link 
+                        "SapClassBasic" )
                 elseif(${child} MATCHES "DMessageBox")
                         SET( ${child}_target_link "DMessageBox")
                 elseif(${child} MATCHES "sqlite")

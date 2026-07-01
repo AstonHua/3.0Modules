@@ -3,7 +3,7 @@ get_filename_component(CURRENT_FOLDER ${CMAKE_CURRENT_SOURCE_DIR} NAME)
 string(TIMESTAMP RUN_TIME)
 message( " model start : " ${CURRENT_FOLDER}:${RUN_TIME})
 
-set(DLL_NAMES "mvs" "opencv" "DMessageBox")
+set(DLL_NAMES "Dalsa" "opencv" "DMessageBox")
 foreach(child ${DLL_NAMES})         
     LIST(APPEND ENV_INCLUDE ${${child}_include})
     LIST(APPEND ENV_LIB ${${child}_lib})
@@ -22,13 +22,12 @@ include_directories(
 link_directories (
     ${ENV_LIB}
     )
-    
  #set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /Zi")
  #set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} /DEBUG /OPT:REF /OPT:ICF")
  #set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} /DEBUG /OPT:REF /OPT:ICF")
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
-SET(CMAKE_CXX_STANDARD 11)
+SET(CMAKE_CXX_STANDARD 17)
 SET(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_AUTOMOC ON)
@@ -68,6 +67,7 @@ target_link_libraries(${CURRENT_FOLDER} PRIVATE
     ${ENV_TARGET}
     ${lib_list}
     )
+
 
 # target_compile_definitions(${CURRENT_FOLDER} PRIVATE HD_AIDEMO_MODULE_LIBRARY)
 

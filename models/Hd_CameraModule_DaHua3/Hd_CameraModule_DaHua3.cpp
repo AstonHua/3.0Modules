@@ -79,7 +79,7 @@ static void onGetFrame(IMV_Frame* pFrame, void* pUser)
 
 	int inputIndex = 0;
 	//IMV_EPixelType convertFormat = gvspPixelMono8;
-	std::vector<cv::Mat> Outmats;
+	QList<cv::Mat> Outmats;
 	cv::Mat srcImage = cv::Mat();
 	if (pFrame->frameInfo.pixelFormat == gvspPixelMono8)
 	{

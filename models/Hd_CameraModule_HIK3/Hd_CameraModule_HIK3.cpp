@@ -12,6 +12,24 @@ void __stdcall ReconnectDevice(unsigned int nMsgType, void* pUser0);
 
 void __stdcall ImageCallBackEx(unsigned char* pData0, MV_FRAME_OUT_INFO_EX* pFrameInfo0, void* pUser0);
 
+
+void __stdcall EventCallBack(MV_EVENT_OUT_INFO* pEventInfo, void* pUser)
+{
+    if (pEventInfo)
+    {
+        CameraFunSDKfactoryCls* CurrentCamera = (CameraFunSDKfactoryCls*)(pUser);
+        __int64 nBlockId = pEventInfo->nBlockIdHigh;
+        nBlockId = (nBlockId << 32) + pEventInfo->nBlockIdLow;
+
+        __int64 nTimestamp = pEventInfo->nTimestampHigh;
+        nTimestamp = (nTimestamp << 32) + pEventInfo->nTimestampLow;
+
+        qDebug()<<__FUNCTION__<<"cameraName" << QString::fromStdString(CurrentCamera->SnCode) << "EventName[" << pEventInfo->EventName << "], EventID[" << pEventInfo->nEventID << "], EventNum[" << CurrentCamera->IntNumEvent++ << "], currentTime[" << QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss.zzz") << "]";
+ 
+    }
+}
+
+
 void CloseDevice(void* handle)
 {
     MV_CC_StopGrabbing(handle);
@@ -59,7 +77,7 @@ bool connctDevice(string GetSnName, void* handle, void* pUser)
     }
     if (!findflad)
 		return false;
-    unsigned char* name = m_stDevList.pDeviceInfo[index]->SpecialInfo.stGigEInfo.chUserDefinedName;
+    unsigned char* name = m_stDevList.pDeviceInfo[index]->SpecialInfo.stGigEInfo.chSerialNumber;
     string userName = static_cast<string>((LPCSTR)name);
     qDebug() << "--UserName:" << QString::fromStdString(userName);
     if (handle != NULL)
@@ -72,6 +90,8 @@ bool connctDevice(string GetSnName, void* handle, void* pUser)
     //打开相机
     MV_CC_CreateHandle(&handle, m_stDevList.pDeviceInfo[index]);
     int nRet = MV_CC_OpenDevice(handle);
+    if (MV_OK != nRet)
+        return false;
     ////触发模式
     //MV_CC_SetEnumValue(handle, "TriggerSource", MV_TRIGGER_SOURCE_LINE0);
     MV_CC_SetEnumValue(handle, "TriggerMode", MV_TRIGGER_MODE_ON);
@@ -82,7 +102,7 @@ bool connctDevice(string GetSnName, void* handle, void* pUser)
         qDebug() << "Set UserSetSelector fail! nRet " << nRet;
     }
     // ch:注册抓图回调 | en:Register image callback
-    MV_CC_SetIntValueEx(handle, "GevHeartbeatTimeout", 10000);//心跳日志
+    //MV_CC_SetIntValueEx(handle, "GevHeartbeatTimeout", 10000);//心跳日志
 
     nRet = MV_CC_RegisterImageCallBackEx(handle, ImageCallBackEx, CurrentCamera);//注册回调
     if (MV_OK != nRet)
@@ -90,6 +110,28 @@ bool connctDevice(string GetSnName, void* handle, void* pUser)
     nRet = MV_CC_RegisterExceptionCallBack(handle, ReconnectDevice, CurrentCamera);//断线重连
     if (MV_OK != nRet)
         return false;
+    nRet = MV_CC_SetImageNodeNum(handle, (unsigned int)CurrentCamera->getImageMaxCoiunts);
+    if (MV_OK != nRet)
+        return false;
+
+    // ch:开启Event | en:Set Event of FrameStart On
+    nRet = MV_CC_SetEnumValueByString(handle, "EventSelector", "FrameStart");
+    if (MV_OK != nRet)
+    {
+        qDebug() << "Set Event Selector fail! nRet" << nRet    ;
+    }
+    nRet = MV_CC_SetEnumValueByString(handle, "EventNotification", "On");
+    if (MV_OK != nRet)
+    {
+        qDebug() << "Set Event Notification fail! nRet " << nRet;     
+    }
+    nRet = MV_CC_RegisterEventCallBackEx(handle, "FrameStart", EventCallBack, CurrentCamera);
+    if (MV_OK != nRet)
+    {
+        qDebug() << "Set MV_CC_RegisterEventCallBackEx fail! nRet " << nRet;
+        //return false;
+    }
+
     MV_CC_StartGrabbing(handle);
     CurrentCamera->handle = std::move(handle);
     return true;
@@ -215,10 +257,6 @@ void __stdcall ImageCallBackEx(unsigned char* pData0, MV_FRAME_OUT_INFO_EX* pFra
             {
                 QObject* obj = CurrentCamera->CallbackFuncMap.value(CurrentCamera->Currentindex).callbackparent;
                 obj->setProperty("cameraIndex", QString::number(CurrentCamera->Currentindex));
-                //QDateTime curT = QDateTime::currentDateTime();
-				//QString imageName = curT.toString("hh_mm_ss_zzz") + "_" + QString::number(CurrentCamera->Currentindex) + "_" + QString::number(pFrameInfo0->nFrameNum);
-				//cv::imwrite(QString(CurrentCamera->RootPath + imageName + ".jpg").toStdString(), srcImage);
-
                 CurrentCamera->CallbackFuncMap.value(CurrentCamera->Currentindex).GetimagescallbackFunc(obj, OutMats);
             }
             else
@@ -244,14 +282,14 @@ void __stdcall ImageCallBackEx(unsigned char* pData0, MV_FRAME_OUT_INFO_EX* pFra
 		qDebug() << "Gamma" << CurrentCamera->gammaMap[CurrentCamera->Currentindex];
     }
     if (CurrentCamera->Currentindex >= CurrentCamera->getImageMaxCoiunts / CurrentCamera->OnceGetImageNum)	CurrentCamera->Currentindex = 0;
-
+    CurrentCamera-> IntNumCallback++;
     pData0 = { 0 };
     QDateTime curT = QDateTime::currentDateTime();
     double time_End = (double)clock();
 
     qDebug() << " checkImg getImg,Time:" << (time_End - time_Start) << "ms"
              << "--CameraName:" << QString::fromLocal8Bit(CurrentCamera->SnCode.c_str()) << " timepoint " << curT.toString("hh:mm:ss.zzz")\
-             << " imgIndex:" << CurrentCamera->Currentindex << "nFrameNum : " << pFrameInfo0->nFrameNum;
+             << " imgIndex:" << CurrentCamera->Currentindex << "nFrameNum : " << pFrameInfo0->nFrameNum<<"subNum"<< CurrentCamera->IntNumCallback- CurrentCamera->IntNumEvent<<"currentnum"<< CurrentCamera->IntNumCallback;
 }
 
 CameraFunSDKfactoryCls::~CameraFunSDKfactoryCls()
@@ -283,6 +321,7 @@ void CameraFunSDKfactoryCls::upDateParam()
     getImageMaxCoiunts = ParasValueMap.value("OnceSignalsGetImageCounts").toInt();
     OnceGetImageNum = ParasValueMap.value("OnceImageCounts").toInt();
     timeOut = ParasValueMap.value("GetOnceImageTimes").toInt();
+	//allowflag = ParasValueMap.value("FirstState") == "true" ? true : false;
     qDebug() << getImageMaxCoiunts << OnceGetImageNum;
     return;
 }
@@ -347,7 +386,8 @@ Hd_CameraModule_HIK3::Hd_CameraModule_HIK3(QString sn, QString path, int settype
 	"OnceSignalsGetImageCounts":"20",
 	"ExposureTime":[],
 	"Gain":[],
-	"Gamma":[]})");
+	"Gamma":[],
+"FirstState":"false"})");
 
     if (!QFile(JsonFilePath).exists())
         createAndWritefile(JsonFilePath, FirstCreateByte.toUtf8());
@@ -398,6 +438,8 @@ bool Hd_CameraModule_HIK3::init()
         else if (Code == 1001)
         {
             m_sdkFunc->allowflag.store(false, std::memory_order::memory_order_release);
+
+            emit trigged(501);
         }
         else if (Code == 11)
         {

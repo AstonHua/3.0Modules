@@ -7,16 +7,18 @@
 #include <QFile>
 #include <QMap>
 #include <QDir>
+#include <QStringList>
 #pragma execution_character_set("utf-8")
 const QByteArray FirstCreateByte
-(R"({"OneSgnalsGetImageCounts": "1",
+(R"({"OnceSignalsGetImageCounts": "2",
 "SeralNum": "",
 "OneGetImageTimeOut": "",
 "LastUpdateTime": "",
 "TriggerSource": "hard",
 "OnceImageCounts":"2"})");
 
-CameraFunSDKfactoryCls  GetDeviceInfo("","");
+CameraFunSDKfactoryCls  GetDeviceInfo("", "");
+static bool InitLibstateFlag = false;
 struct OnePb
 {
 	PbGlobalObject* base = nullptr;
@@ -24,8 +26,71 @@ struct OnePb
 	QString DeviceSn;
 };
 QMap<QString, OnePb>  TotalMap;
-
+QMap<const KglDevice*, CameraFunSDKfactoryCls*> DevicesFromfactoryMap;
 // Camera type
+
+static QString kglResultToString(KglResult result)
+{
+	switch (result)
+	{
+	case KGL_SUCCESS: return "KGL_SUCCESS";
+	case KGL_GENERIC_ERROR: return "KGL_GENERIC_ERROR";
+	case KGL_ERR_NOT_INITIALIZED: return "KGL_ERR_NOT_INITIALIZED";
+	case KGL_ERR_NOT_IMPLEMENTED: return "KGL_ERR_NOT_IMPLEMENTED";
+	case KGL_ERR_INVALID_PARAMETER: return "KGL_ERR_INVALID_PARAMETER";
+	case KGL_ERR_INVALID_FEATURE_ACCESS: return "KGL_ERR_INVALID_FEATURE_ACCESS";
+	case KGL_ERR_TIMEOUT: return "KGL_ERR_TIMEOUT";
+	case KGL_NOT_FOUND: return "KGL_NOT_FOUND";
+	case KGL_DEVICE_NOT_CONNECTED: return "KGL_DEVICE_NOT_CONNECTED";
+	case KGL_STATE_ERROR: return "KGL_STATE_ERROR";
+	case KGL_TYPE_COMPATIBILITY_ERROR: return "KGL_TYPE_COMPATIBILITY_ERROR";
+	case KGL_NOT_SUPPORTED: return "KGL_NOT_SUPPORTED";
+	default: return QString("KglResult(%1)").arg(static_cast<int>(result));
+	}
+}
+
+static QString featureTypeToString(KglFeatureType type)
+{
+	switch (type)
+	{
+	case KGL_TYPE_INTEGER: return "Integer";
+	case KGL_TYPE_ENUM: return "Enum";
+	case KGL_TYPE_BOOLEAN: return "Boolean";
+	case KGL_TYPE_STRING: return "String";
+	case KGL_TYPE_COMMAND: return "Command";
+	case KGL_TYPE_FLOAT: return "Float";
+	case KGL_TYPE_REGISTER: return "Register";
+	case KGL_TYPE_PARAMETER: return "Parameter";
+	case KGL_TYPE_UNDEFINED: return "Undefined";
+	default: return QString("FeatureType(%1)").arg(static_cast<int>(type));
+	}
+}
+
+static QString enumEntriesToString(KglGenParameterArray* featureNodes, const std::string& featureName)
+{
+	if (featureNodes == nullptr)
+		return "";
+
+	int64_t count = 0;
+	KglResult result = featureNodes->getEnumEntriesCount(featureName.c_str(), count);
+	if (result != KGL_SUCCESS)
+		return QString("getEnumEntriesCount failed: %1").arg(kglResultToString(result));
+
+	QStringList entries;
+	for (int64_t i = 0; i < count; ++i)
+	{
+		const KglGenEnumEntry* entry = nullptr;
+		result = featureNodes->getEnumEntry(featureName.c_str(), i, &entry);
+		if (result != KGL_SUCCESS || entry == nullptr)
+			continue;
+
+		KglString name;
+		if (entry->getName(name) == KGL_SUCCESS)
+			entries << QString("%1%2").arg(entry->isAvailable() ? "" : "(unavailable)").arg(name.getChar());
+	}
+
+	return entries.join(", ");
+}
 
 
 #pragma region Device control
@@ -64,6 +129,7 @@ bool CameraFunSDKfactoryCls::Connect(string name)
 
 	kglDevice = new KglDevice();
 	kglStream = new KglStream();
+	DevicesFromfactoryMap.insert(kglDevice, this);//20260524新增通过事件通知去拿图
 	int i = 0;
 	for (; i < count; i++)
 	{
@@ -109,6 +175,8 @@ bool CameraFunSDKfactoryCls::Connect(string name)
 	// Get FeatureNode of camera device
 	kgllFeatureNodes = kglDevice->getDeviceParameters();
 	kgllStreamFeatureNodes = kglStream->getStreamParameters();
+	if (kgllFeatureNodes == nullptr || kgllStreamFeatureNodes == nullptr)
+		return false;
 	return true;
 }
 void CameraFunSDKfactoryCls::Disconnect()
@@ -175,32 +243,36 @@ void CameraFunSDKfactoryCls::setFloatValue(const std::string sFeatureName, const
 		}
 	}
 }
-void CameraFunSDKfactoryCls::setBooleanValue(const std::string sFeatureName, const bool value)
+bool CameraFunSDKfactoryCls::setBooleanValue(const std::string sFeatureName, const bool value)
 {
 	KglResult result;
-	KglString sConfigurationLastFailureCause;
-
 	result = kgllFeatureNodes->setBooleanValue(sFeatureName.c_str(), value);
 	if (KGL_SUCCESS != result)
 	{
-		if (KGL_SUCCESS != result)
-		{
-			qDebug() << "(2.5Dmodel) " << ("Error : setParam\n");
-			return;
-		}
+		qWarning() << "(2.5Dmodel) setBooleanValue failed"
+			<< "feature:" << QString::fromStdString(sFeatureName)
+			<< "value:" << value
+			<< "result:" << kglResultToString(result)
+			<< "type:" << featureTypeToString(kgllFeatureNodes->getFeatureType(sFeatureName.c_str()));
+		return false;
 	}
+	return true;
 }
-void CameraFunSDKfactoryCls::setEnumValue(const std::string sFeatureName, std::string value)
+bool CameraFunSDKfactoryCls::setEnumValue(const std::string sFeatureName, std::string value)
 {
 	KglResult result;
-	KglString sConfigurationLastFailureCause;
-
 	result = kgllFeatureNodes->setEnumValue(sFeatureName.c_str(), value.c_str());
 	if (KGL_SUCCESS != result)
 	{
-		qDebug() << "(2.5Dmodel) " << ("Error : setParam\n");
-		return;
+		qWarning() << "(2.5Dmodel) setEnumValue failed"
+			<< "feature:" << QString::fromStdString(sFeatureName)
+			<< "value:" << QString::fromStdString(value)
+			<< "result:" << kglResultToString(result)
+			<< "type:" << featureTypeToString(kgllFeatureNodes->getFeatureType(sFeatureName.c_str()))
+			<< "entries:" << enumEntriesToString(kgllFeatureNodes, sFeatureName);
+		return false;
 	}
+	return true;
 }
 void CameraFunSDKfactoryCls::setStringValue(const std::string sFeatureName, const std::string value)
 {
@@ -618,7 +690,7 @@ void CameraFunSDKfactoryCls::AcquisitionStop()
 	}
 }
 
-bool CameraFunSDKfactoryCls::QueueBuffer(KglBuffer* kglBuffer)
+bool CameraFunSDKfactoryCls::QueueBuffer(KglBuffer*& kglBuffer)
 {
 	KglResult result;
 	KglResult operationResult;
@@ -634,14 +706,19 @@ bool CameraFunSDKfactoryCls::QueueBuffer(KglBuffer* kglBuffer)
 	result = kglBuffer->allocate(payloadsize);
 	if (KGL_SUCCESS != result)
 	{
-		qWarning() << ("Error : allocate\n");
+		qWarning() << "Error : allocate" << kglResultToString(result);
+		delete kglBuffer;
+		kglBuffer = nullptr;
 		return false;
 	}
 
 	result = kglStream->queueBuffer(kglBuffer);
 	if ((KGL_SUCCESS != result) && (KGL_PENDING != result))
 	{
-		qWarning() << ("Error : queueBuffer\n");
+		qWarning() << "Error : queueBuffer" << kglResultToString(result);
+		kglBuffer->free();
+		delete kglBuffer;
+		kglBuffer = nullptr;
 		return false;
 	}
 	return true;
@@ -655,7 +732,7 @@ cv::Mat CameraFunSDKfactoryCls::RetrieveBuffer(KglBuffer* kglBuffer, cv::Mat& bm
 	result = kglStream->retrieveBuffer(&kglBuffer, operationResult, 10000);
 	if ((KGL_SUCCESS != result) || (KGL_SUCCESS != operationResult))
 	{
-		
+
 		qWarning() << "[retrieveBuffer] " << "result:" << result;
 		qWarning() << "[retrieveBuffer] " << "operationResult:" << operationResult;
 		if (kglBuffer != NULL)
@@ -665,7 +742,9 @@ cv::Mat CameraFunSDKfactoryCls::RetrieveBuffer(KglBuffer* kglBuffer, cv::Mat& bm
 			kglBuffer = NULL;
 		}
 		qWarning() << ("Error : retrieveBuffer\n");
-		return cv::Mat::zeros(500, 500, CV_8UC1);
+		cv::Mat tempMat = cv::Mat::zeros(500, 500, CV_8UC1);
+		tempMat.copyTo(bmpMat);
+		return tempMat;
 	}
 
 	UINT bmpSize = kglBuffer->getAcquiredSize();
@@ -743,47 +822,55 @@ bool CameraFunSDKfactoryCls::TriggerSoftware()
 bool CameraFunSDKfactoryCls::AcquisitionStartEx_SingleFrame(bool bMultiCaptureUpdateImage, std::string sMultiCaptureImageType, std::vector<cv::Mat>& matVec)
 {
 	std::string sPixelFormat;
-	setBooleanValue("MultiCaptureUpdateImage", bMultiCaptureUpdateImage);
-	setEnumValue("MultiCaptureImageType", sMultiCaptureImageType);
+	bool updateImageSet = setBooleanValue("MultiCaptureUpdateImage", bMultiCaptureUpdateImage);
+	bool imageTypeSet = setEnumValue("MultiCaptureImageType", sMultiCaptureImageType);
+	if (!updateImageSet || !imageTypeSet)
+	{
+		qWarning() << "(2.5Dmodel) MultiCapture settings are unavailable on this device/SDK"
+			<< "updateImageSet:" << updateImageSet
+			<< "imageTypeSet:" << imageTypeSet
+			<< "imageType:" << QString::fromStdString(sMultiCaptureImageType);
+	}
 
 	cv::Mat bmp;
 	KglBuffer* kglBuffer = nullptr;
 	if (!QueueBuffer(kglBuffer))
 		return false;
 	AcquisitionStart();
-
+	clock_t start = clock();
 	RetrieveBuffer(kglBuffer, bmp);
+	qDebug() << __LINE__ << __FUNCTION__ << "RetrieveBuffer times" << clock() - start << "ms";
 	if (!bmp.empty())
 	{
-		//AcquisitionStop();
+		AcquisitionStop();
 		matVec.push_back(bmp);
 		return true;
 	}
 	else
 	{
-		//AcquisitionStop();
+		AcquisitionStop();
 		return false;
 	}
 
 }
 
-CameraFunSDKfactoryCls::CameraFunSDKfactoryCls(QString sn,QString path ) :snName(sn.toStdString()),RootPath(path)
+CameraFunSDKfactoryCls::CameraFunSDKfactoryCls(QString sn, QString path) :snName(sn.toStdString()), RootPath(path)
 {
 	MatVecQueue = std::make_shared<ThreadSafeQueue<std::vector<Mat>>>();
 }
 
 CameraFunSDKfactoryCls::~CameraFunSDKfactoryCls()
 {
-	stopbit = true;
-	//getpicturethreadqueue->end();
-	if (getpicturethread.joinable())
-		getpicturethread.join();
+	//stopbit = true;
+	////getpicturethreadqueue->end();
+	//if (getpicturethread.joinable())
+	//	getpicturethread.join();
 	Disconnect();
 }
 
 void CameraFunSDKfactoryCls::upDateParam()
 {
-	GetImageNums = ParasValueMap.value("OneSgnalsGetImageCounts").toInt();
+	GetImageNums = ParasValueMap.value("OnceSignalsGetImageCounts").toInt();
 	MaxTimeOut = ParasValueMap.value("OneGetImageTimeOut").toInt();
 }
 
@@ -814,15 +901,10 @@ bool CameraFunSDKfactoryCls::initSdk(QMap<QString, QString>& insideValuesMaps)
 	//setSystemFeatureValue("MaximumResendRequestRetryByPacket", 0);
 	//setIntegerValue("GevSCPSPacketsize", 7716);//解决图像横纹问题,减小cpu使用率
 	//setIntegerValue("GevSCPD", 344);//减小延迟
+	std::string RunMode = "1";
+	getEnumValue("OperationMode", RunMode);
+	qDebug() << __FUNCTION__ << __LINE__ << "sTriggerSource:" << QString::fromStdString(RunMode);
 
-
-	getBooleanValue("ImageCaptureBufferEnable", bBGEnable);
-	if (bBGEnable)
-	{
-		executeCommand("ImageCaptureBufferClear");
-		executeCommand("BufferCaptureAcquisitionStart");
-		isBufferCapturestart = true;
-	}
 	std::string sImageType1 = "1";
 	sImageType = GetEnableImageType(sImageType1); //获取图像类别 6张
 
@@ -837,44 +919,58 @@ bool CameraFunSDKfactoryCls::initSdk(QMap<QString, QString>& insideValuesMaps)
 	}
 	else
 		qDebug() << __FUNCTION__ << __LINE__ << "hardTrigger";
+	getBooleanValue("ImageCaptureBufferEnable", bBGEnable);
+	if (bBGEnable)
+	{
+		bool isactive = false;
+		getBooleanValue("AcquisitionActiveStatus", isactive);
+		if (!isactive)
+		{
+			setEnumValue("OperationMode", "RunMode");
+		}
+		executeCommand("ImageCaptureBufferClear");
+		executeCommand("BufferCaptureAcquisitionStart");
+		isBufferCapturestart = true;
+	}
 	insideValuesMaps["OnceImageCounts"] = QString::number(sImageType.size());
 	insideValuesMaps["ImageIndexType"] = QString::number(sImageType.size());
 	insideValuesMaps["TriggerSource"] = QString::fromStdString(CurrentsTriggerSource);
-	getpicturethread = std::thread(&CameraFunSDKfactoryCls::getPictureThread, this);
+	//getpicturethread = std::thread(&CameraFunSDKfactoryCls::getPictureThread, this);
 	return true;
 }
 
 bool CameraFunSDKfactoryCls::setParamMap(const QMap<QString, QString>& ParasValueMap)
 {
-	this->ParasValueMap = ParasValueMap; 
+	this->ParasValueMap = ParasValueMap;
 
 	upDateParam();
-	
+
 	return true;
 }
 
 void CameraFunSDKfactoryCls::getPictureThread()
 {
-	while (!stopbit)
+	//while (!stopbit)
 	{
-		if (!ThreadRunningflag)
+		/*if (!ThreadRunningflag)
 		{
 			Sleep(1);
 			continue;
 		}
-			
+		*/
+		qDebug() << __FUNCTION__ << __LINE__ << QDateTime::currentDateTime().toString("yyyy_MM_dd hh:mm:ss:zzz");
 		std::vector<cv::Mat> matvec;
-		if (AcquisitionStartEx_SingleFrame(true, sImageType[0], matvec) ==true)
+		if (AcquisitionStartEx_SingleFrame(true, sImageType[0], matvec) == true)
 		{
 
 			for (int i = 1; i < sImageType.size(); i++)
 			{
-				if (sImageType[i] != "" && sImageType[i] != sImageType[i - 1])	
+				if (sImageType[i] != "" && sImageType[i] != sImageType[i - 1])
 				{
 					AcquisitionStartEx_SingleFrame(false, sImageType[i], matvec);
 				}
 			}
-			//if (allowflag.load(std::memory_order::memory_order_acquire))
+			if (allowflag.load(std::memory_order::memory_order_acquire))
 			{
 				if (CurrentsTriggerSource == "Software")
 				{
@@ -883,34 +979,32 @@ void CameraFunSDKfactoryCls::getPictureThread()
 				}
 				else
 				{
-					int index = Currentindex* matvec.size();
+					//int index = Currentindex* matvec.size();
 
-					for (auto& elem : matvec) 
+					for (auto& elem : matvec)
 					{
 						QList<cv::Mat> dst;
 						dst.push_back(std::move(elem)); // 移动而非拷贝，elem 变为有效但未指定的状态
-						QObject* obj = CallbackFuncMap.value(index).callbackparent;
-						obj->setProperty("cameraIndex", QString::number(index));
+						QObject* obj = CallbackFuncMap.value(Currentindex).callbackparent;
+						obj->setProperty("cameraIndex", QString::number(Currentindex));
 
-						CallbackFuncMap.value(index).GetimagescallbackFunc(obj, dst);
-						index++;
+						CallbackFuncMap.value(Currentindex).GetimagescallbackFunc(obj, dst);
+						Currentindex++;
 					}
-		
 				}
-			
 			}
-			Currentindex++;
+			//Currentindex++;
 		}
 		if (Currentindex >= GetImageNums)
 		{
 			Currentindex = 0;
-			ThreadRunningflag = false;
+			//ThreadRunningflag = false;
 		}
 	}
 }
 
-Hd_25DCameraVJ_module::Hd_25DCameraVJ_module(QString SnName,QString path,int settype, QObject* parent) : 
-	PbGlobalObject(settype, parent),SnCode(SnName),RootPath(path)
+Hd_25DCameraVJ_module::Hd_25DCameraVJ_module(QString SnName, QString path, int settype, QObject* parent) :
+	PbGlobalObject(settype, parent), SnCode(SnName), RootPath(path)
 {
 	famliy = PGOFAMLIY::CAMERA2_5D;
 	//RootPath = RootPath + "/Hd_CameraModule_3DKeyence3/";
@@ -942,7 +1036,7 @@ bool Hd_25DCameraVJ_module::data(std::vector<cv::Mat>& outmats, QStringList& out
 
 	if (outmats.size() != m_sdkFunc->sImageType.size() || ret == false)
 	{
-		cv::Mat mat = cv::Mat::zeros(100,100,0);
+		cv::Mat mat = cv::Mat::zeros(100, 100, 0);
 		outmats.push_back(mat);
 		qCritical() << __FUNCTION__ << "   line:" << __LINE__ << " srcImage is null";
 		return false;
@@ -970,20 +1064,23 @@ bool Hd_25DCameraVJ_module::init()
 		{
 			m_sdkFunc->Currentindex = 0;
 			m_sdkFunc->MatVecQueue->clear();
-			m_sdkFunc->executeCommand("BufferCaptureAcquisitionStop");
+			/*m_sdkFunc->executeCommand("BufferCaptureAcquisitionStop");
 			m_sdkFunc->executeCommand("ImageCaptureBufferClear");
-			m_sdkFunc->executeCommand("BufferCaptureAcquisitionStart");
+			m_sdkFunc->executeCommand("BufferCaptureAcquisitionStart");*/
 			m_sdkFunc->allowflag.store(true, std::memory_order::memory_order_release);
-			m_sdkFunc->ThreadRunningflag = true;
+			//m_sdkFunc->ThreadRunningflag = true;
 			emit trigged(501);
 		}
 		else if (Code == 1001)
 		{
 			m_sdkFunc->allowflag.store(false, std::memory_order::memory_order_release);
-			m_sdkFunc->ThreadRunningflag = false;
+			//m_sdkFunc->ThreadRunningflag = false;
+
+			emit trigged(501);
 		}
 		});
 	bool flag = m_sdkFunc->initSdk(ParasValueMap);
+	setParameter(ParasValueMap);
 	if (flag)
 	{
 		if (m_sdkFunc->CurrentsTriggerSource == "Software")
@@ -1070,64 +1167,66 @@ void LocalKglDeviceEventSink::onEventGenICam(const KglDevice* pDevice, const uin
 	{
 	case 0x9000:
 	{
-		//qDebug() << __FUNCTION__ << "line:" << __LINE__ << pDevice << " , Trigger";
+		qDebug() << __FUNCTION__ << "line:" << __LINE__ << pDevice << " , Trigger";
 		//kCamera->EventQueue->push(eventID);
 		break;
 	}
 	case 0x9001:
 	{
-		//qDebug() << __FUNCTION__ << "line:" << __LINE__ << pDevice << " , TriggerMissed";
+		qDebug() << __FUNCTION__ << "line:" << __LINE__ << pDevice << " , TriggerMissed";
 		break;
 	}
 	case 0x9002:
 	{
-		//qDebug() << __FUNCTION__ << "line:" << __LINE__ << pDevice << " , TriggerWaitStart";
+		qDebug() << __FUNCTION__ << "line:" << __LINE__ << pDevice << " , TriggerWaitStart";
 		break;
 	}
 	case 0x9003:
 	{
-		//qDebug() << __FUNCTION__ << "line:" << __LINE__ << pDevice << " , TriggerWaitEnd";
+		qDebug() << __FUNCTION__ << "line:" << __LINE__ << pDevice << " , TriggerWaitEnd";
 		break;
 	}
 	case 0x9004:
 	{
-		//qDebug() << __FUNCTION__ << "line:" << __LINE__ << pDevice << " , ExposuerStart";
+		qDebug() << __FUNCTION__ << "line:" << __LINE__ << pDevice << " , ExposuerStart";
 		break;
 	}
 	case 0x9005:
 	{
-		//qDebug() << __FUNCTION__ << "line:" << __LINE__ << pDevice << " , ExposuerEnd";
+		qDebug() << __FUNCTION__ << "line:" << __LINE__ << pDevice << " , ExposuerEnd";
 		break;
 	}
 	case 0x9006:
 	{
-		//qDebug() << __FUNCTION__ << "line:" << __LINE__ << pDevice << " , transfer start";
+		qDebug() << __FUNCTION__ << "line:" << __LINE__ << pDevice << " , transfer start";
 		break;
 	}
 	case 0x9007:
 	{
-		//qDebug() << __FUNCTION__ << "line:" << __LINE__ << pDevice << " , transferend: ";
+		qDebug() << __FUNCTION__ << "line:" << __LINE__ << pDevice << " , transferend: ";
+
 		//kCamera->EventQueue->push(eventID);
 		break;
 	}
 	case 0x9008:
 	{
-		//qDebug() << __FUNCTION__ << "line:" << __LINE__ << pDevice << " , transfer ready";
+		qDebug() << __FUNCTION__ << "line:" << __LINE__ << pDevice << " , transfer ready";
+		DevicesFromfactoryMap.value(pDevice)->getPictureThread();
 		break;
 	}
 	case 0x900A:
 	{
-		//qDebug() << __FUNCTION__ << "line:" << __LINE__ << pDevice << " , ImageCaptureBufferFull";
+		qDebug() << __FUNCTION__ << "line:" << __LINE__ << pDevice << " , ImageCaptureBufferFull";
 		break;
 	}
 	case 0x900B:
 	{
-		//qDebug() << __FUNCTION__ << "line:" << __LINE__ << pDevice << " , ImageCaptureBufferOverflow";
+		qDebug() << __FUNCTION__ << "line:" << __LINE__ << pDevice << " , ImageCaptureBufferOverflow";
 		break;
 	}
 	case 0x900C:
 	{
-		//qDebug() << __FUNCTION__ << "line:" << __LINE__ << pDevice << " , ImageCaptureBufferEmpty";
+		qDebug() << __FUNCTION__ << "line:" << __LINE__ << pDevice << " , ImageCaptureBufferEmpty";
 		break;
 	}
 	default:
@@ -1137,10 +1236,27 @@ void LocalKglDeviceEventSink::onEventGenICam(const KglDevice* pDevice, const uin
 
 bool create(const QString& DeviceSn, const QString& name, const QString& path)
 {
+	if (!InitLibstateFlag)
+	{
+
+		KglResult result = KglSystem::initialize();
+		if (result != KGL_SUCCESS)
+		{
+			InitLibstateFlag = false;
+			qWarning() << __LINE__ << "KglSystem::initialize() error" << result;
+			return false;
+
+		}
+		else
+		{
+			InitLibstateFlag = true;
+		}
+	}
 	if (DeviceSn.isEmpty() || name.isEmpty() || path.isEmpty())
 		return false;
+	if (TotalMap.keys().contains(name.split(':').first())) return true;
 	OnePb temp;
-	temp.base = new Hd_25DCameraVJ_module(DeviceSn, path+"/Hd_CameraModule_Keyence25DVJ3/");
+	temp.base = new Hd_25DCameraVJ_module(DeviceSn, path + "/Hd_CameraModule_Keyence25DVJ3/");
 	temp.baseWidget = new mPrivateWidget(temp.base);
 	//temp.base->registerCallBackFun(GetCallbackMat, temp.baseWidget,"0");
 	temp.DeviceSn = DeviceSn;
@@ -1177,8 +1293,24 @@ PbGlobalObject* getCameraPtr(const QString& name)
 
 QStringList getCameraSnList()
 {
-	KglSystem::initialize();
 	QStringList temp;
+	if (!InitLibstateFlag)
+	{
+		KglResult result = KglSystem::initialize();
+		if (result != KGL_SUCCESS)
+		{
+			InitLibstateFlag = false;
+
+			qWarning() << __LINE__ << "KglSystem::initialize() error" << result;
+			return temp;
+
+		}
+		else
+		{
+			InitLibstateFlag = true;
+		}
+	}
+
 	KglSystem kglSystem;
 	if (KGL_SUCCESS != kglSystem.find()) {
 		qDebug() << "Failed to find camera device.";
@@ -1234,7 +1366,7 @@ void mPrivateWidget::InitWidget()
 		std::vector<cv::Mat> mats;  QStringList list;
 		emit m_Camerahandle->trigged(1000);
 		m_Camerahandle->setData(mats, list);
-		
+
 		//m_Camerahandle->setData(mats, list);
 		m_Camerahandle->data(mats, list);
 		cv::Mat tempMat = mats.at(0);
@@ -1245,7 +1377,7 @@ void mPrivateWidget::InitWidget()
 		std::vector<cv::Mat> mats;  QStringList list;
 		emit m_Camerahandle->trigged(1001);
 		});
-	
+
 }
 
 void GetCallbackMat(QObject* widget, const std::vector<cv::Mat>& Mats)
