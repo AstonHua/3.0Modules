@@ -251,18 +251,10 @@ void __stdcall ImageCallBackEx(unsigned char* pData0, MV_FRAME_OUT_INFO_EX* pFra
         }
         else
         {
-            qDebug() << CurrentCamera->Currentindex<<"图像数量"<< OutMats.size();
-            ///硬触发不受开关控制，没有缓存
-            if (CurrentCamera->CallbackFuncMap.keys().contains(CurrentCamera->Currentindex))
-            {
-                QObject* obj = CurrentCamera->CallbackFuncMap.value(CurrentCamera->Currentindex).callbackparent;
-                obj->setProperty("cameraIndex", QString::number(CurrentCamera->Currentindex));
-                CurrentCamera->CallbackFuncMap.value(CurrentCamera->Currentindex).GetimagescallbackFunc(obj, OutMats);
-            }
-            else
-            {
-                qWarning() << "CallbackFuncMap.keys()" << CurrentCamera->CallbackFuncMap.keys() << CurrentCamera->Currentindex;
-            }
+            const int callbackIndex = CurrentCamera->Currentindex;
+            qDebug() << callbackIndex << "图像数量" << OutMats.size();
+            ///硬触发不受开关控制，通过异步队列派发，避免外部回调阻塞 SDK 回调线程
+            CurrentCamera->enqueueAsyncCallback(callbackIndex, OutMats);
         }
     }
     CurrentCamera->Currentindex++;
@@ -292,9 +284,98 @@ void __stdcall ImageCallBackEx(unsigned char* pData0, MV_FRAME_OUT_INFO_EX* pFra
              << " imgIndex:" << CurrentCamera->Currentindex << "nFrameNum : " << pFrameInfo0->nFrameNum<<"subNum"<< CurrentCamera->IntNumCallback- CurrentCamera->IntNumEvent<<"currentnum"<< CurrentCamera->IntNumCallback;
 }
 
+void CameraFunSDKfactoryCls::startAsyncCallbackWorker()
+{
+    bool expected = false;
+    if (!AsyncCallbackRunning.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+        return;
+    AsyncCallbackWorker = std::thread(&CameraFunSDKfactoryCls::asyncCallbackLoop, this);
+}
+
+void CameraFunSDKfactoryCls::stopAsyncCallbackWorker()
+{
+    AsyncCallbackRunning.store(false, std::memory_order_release);
+    AsyncCallbackCv.notify_all();
+    if (AsyncCallbackWorker.joinable())
+        AsyncCallbackWorker.join();
+    {
+        std::lock_guard<std::mutex> lock(AsyncCallbackMutex);
+        AsyncCallbackQueue.clear();
+    }
+}
+
+void CameraFunSDKfactoryCls::enqueueAsyncCallback(int cameraIndex, const QList<cv::Mat>& images)
+{
+    if (!AsyncCallbackRunning.load(std::memory_order_acquire))
+        return;
+
+    AsyncCallbackTask task;
+    task.cameraIndex = cameraIndex;
+    task.images = images;
+    {
+        std::lock_guard<std::mutex> lock(AsyncCallbackMutex);
+        AsyncCallbackQueue.push_back(task);
+    }
+    AsyncCallbackCv.notify_one();
+}
+
+void CameraFunSDKfactoryCls::asyncCallbackLoop()
+{
+    while (AsyncCallbackRunning.load(std::memory_order_acquire))
+    {
+        AsyncCallbackTask task;
+        {
+            std::unique_lock<std::mutex> lock(AsyncCallbackMutex);
+            AsyncCallbackCv.wait(lock, [this]() {
+                return !AsyncCallbackRunning.load(std::memory_order_acquire) || !AsyncCallbackQueue.empty();
+            });
+            if (!AsyncCallbackRunning.load(std::memory_order_acquire) && AsyncCallbackQueue.empty())
+                break;
+            if (AsyncCallbackQueue.empty())
+                continue;
+            task = AsyncCallbackQueue.front();
+            AsyncCallbackQueue.pop_front();
+        }
+
+        CallbackFuncPack callbackPack;
+        QStringList callbackKeys;
+        bool hasCallback = false;
+        {
+            std::lock_guard<std::mutex> lock(CallbackFuncMapMutex);
+            callbackKeys.reserve(CallbackFuncMap.size());
+            for (auto it = CallbackFuncMap.constBegin(); it != CallbackFuncMap.constEnd(); ++it)
+                callbackKeys << QString::number(it.key());
+            const auto it = CallbackFuncMap.find(task.cameraIndex);
+            if (it != CallbackFuncMap.end())
+            {
+                callbackPack = it.value();
+                hasCallback = true;
+            }
+        }
+
+        if (!hasCallback || callbackPack.callbackparent == nullptr || callbackPack.GetimagescallbackFunc == nullptr)
+        {
+            qWarning() << "CallbackFuncMap.keys()" << callbackKeys << task.cameraIndex;
+            continue;
+        }
+
+        QPointer<QObject> callbackObject(callbackPack.callbackparent);
+        if (callbackObject.isNull())
+            continue;
+        QObject* obj = callbackObject.data();
+        obj->setProperty("cameraIndex", QString::number(task.cameraIndex));
+        callbackPack.GetimagescallbackFunc(obj, task.images);
+    }
+}
+
 CameraFunSDKfactoryCls::~CameraFunSDKfactoryCls()
 {
-    CloseDevice(handle);
+    if (handle != nullptr)
+    {
+        CloseDevice(handle);
+        handle = nullptr;
+    }
+    stopAsyncCallbackWorker();
 }
 
 bool CameraFunSDKfactoryCls::initSdk(QMap<QString, QString>& insideValuesMaps)
@@ -306,6 +387,7 @@ bool CameraFunSDKfactoryCls::initSdk(QMap<QString, QString>& insideValuesMaps)
         return false;
     }
     emit trigged(0);
+    startAsyncCallbackWorker();
 
     //qDebug() << getHandle();
     MVCC_ENUMVALUE stEnumValue = { 0 };
@@ -502,6 +584,7 @@ void Hd_CameraModule_HIK3::registerCallBackFun(PBGLOBAL_CALLBACK_FUN func, QObje
     TempPack.callbackparent = parent;
     TempPack.cameraIndex = getString;
     TempPack.GetimagescallbackFunc = func;
+    std::lock_guard<std::mutex> lock(m_sdkFunc->CallbackFuncMapMutex);
     m_sdkFunc->CallbackFuncMap.insert(getString.toInt(), TempPack);
     qDebug() << m_sdkFunc << "registerCallBackFun" << getString;
 }
@@ -509,6 +592,7 @@ void Hd_CameraModule_HIK3::registerCallBackFun(PBGLOBAL_CALLBACK_FUN func, QObje
 void Hd_CameraModule_HIK3::cancelCallBackFun(PBGLOBAL_CALLBACK_FUN callBackFun, QObject* parent, const QString& getString)
 {
     int index = getString.toInt();
+    std::lock_guard<std::mutex> lock(m_sdkFunc->CallbackFuncMapMutex);
     if (m_sdkFunc->CallbackFuncMap.keys().contains(index))
     {
         if (callBackFun == m_sdkFunc->CallbackFuncMap.value(index).GetimagescallbackFunc)

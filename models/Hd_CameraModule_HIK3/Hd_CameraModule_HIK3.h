@@ -9,6 +9,12 @@
 #include <Windows.h>
 #include <time.h>
 #include <QPushButton>
+#include <QPointer>
+#include <atomic>
+#include <condition_variable>
+#include <deque>
+#include <mutex>
+#include <thread>
 #include "pbglobalobject.h"
 #include <ThreadSafeQueue.h>
 #include <struct.h>
@@ -38,6 +44,21 @@ public:
     void* handle = nullptr;//相机句柄
     ThreadSafeQueue<QList<cv::Mat>> MatQueue;
     QMap<int,CallbackFuncPack> CallbackFuncMap;
+    struct AsyncCallbackTask
+    {
+        int cameraIndex = 0;
+        QList<cv::Mat> images;
+    };
+    std::mutex CallbackFuncMapMutex;
+    std::mutex AsyncCallbackMutex;
+    std::condition_variable AsyncCallbackCv;
+    std::deque<AsyncCallbackTask> AsyncCallbackQueue;
+    std::thread AsyncCallbackWorker;
+    std::atomic_bool AsyncCallbackRunning{false};
+    void startAsyncCallbackWorker();
+    void stopAsyncCallbackWorker();
+    void enqueueAsyncCallback(int cameraIndex, const QList<cv::Mat>& images);
+    void asyncCallbackLoop();
     std::atomic_bool allowflag{true};
      int IntNumEvent = 0;
      int IntNumCallback = 0;

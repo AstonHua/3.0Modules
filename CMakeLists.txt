@@ -171,6 +171,9 @@ if(ON)
                           "GoApi" 
                           "kApi"
                           "GoPxLSdk")
+                elseif(${child} MATCHES "keyence3DLJS8")
+					    SET( ${child}_target_link 
+                          "LJS8_IF"  )
                 elseif(${child} MATCHES "keyence3D")
 					    SET( ${child}_target_link 
                           "LJX8_IF"  )
