@@ -132,8 +132,13 @@ bool connctDevice(string GetSnName, void* handle, void* pUser)
         //return false;
     }
 
+    MVCC_ENUMVALUE stEnumValue = { 0 };
+    if (MV_CC_GetEnumValue(handle, "TriggerSource", &stEnumValue) == MV_OK)
+        CurrentCamera->m_MV_CAM_TRIGGER_SOURCE = (MV_CAM_TRIGGER_SOURCE)stEnumValue.nCurValue;
+
     MV_CC_StartGrabbing(handle);
     CurrentCamera->handle = std::move(handle);
+    CurrentCamera->AsyncCallbackGeneration.fetch_add(1, std::memory_order_acq_rel);
     return true;
 }
 
@@ -171,91 +176,74 @@ void __stdcall ImageCallBackEx(unsigned char* pData0, MV_FRAME_OUT_INFO_EX* pFra
     QList<cv::Mat> OutMats;
     CameraFunSDKfactoryCls* CurrentCamera = (CameraFunSDKfactoryCls*)(pUser0);
     qDebug() << CurrentCamera << pUser0;
-    if (pFrameInfo0)
-    {
-        //获取的是单通道灰度图
-        auto& stImageInfo = *pFrameInfo0;
-        if (pFrameInfo0->enPixelType == PixelType_Gvsp_Mono8)//获取当前采集到的图像格式
-        {
-            srcImage = cv::Mat(pFrameInfo0->nHeight, pFrameInfo0->nWidth, CV_8UC1, pData0);
-        }
-        //获取的是RGB8图
-        else if (pFrameInfo0->enPixelType == PixelType_Gvsp_BGR8_Packed)
-        {
-            srcImage = cv::Mat(pFrameInfo0->nHeight, pFrameInfo0->nWidth, CV_8UC3, pData0);
-        }
-
-        ////获取的是RGB8图
-        //else if (pFrameInfo0->enPixelType == PixelType_Gvsp_RGB8_Packed)
-        //{
-        //    cv::Mat dst = cv::Mat(pFrameInfo0->nHeight, pFrameInfo0->nWidth, CV_8UC3, pData0);
-        //    //cv::cvtColor(matimage, matimage, cv::COLOR_RGB2BGR);
-        //    srcImage = cv::Mat::zeros(pFrameInfo0->nHeight, pFrameInfo0->nWidth, CV_8UC3);
-        //    std::vector<cv::Mat> channels;
-        //    cv::split(dst, channels);//分割matimage的通道
-        //    std::vector<cv::Mat> dstchannels;
-        //    for (int i = 2; i >= 0; i--)
-        //    {
-        //        dstchannels.push_back(channels[i]);
-        //    }
-        //    merge(dstchannels, srcImage);
-        //}
-
-        else if (IsColor(pFrameInfo0->enPixelType)) //其它格式彩色图
-        {
-            MvGvspPixelType enDstPixelType = PixelType_Gvsp_BGR8_Packed;
-            srcImage = cv::Mat(stImageInfo.nHeight, stImageInfo.nWidth, CV_8UC3);
-
-            unsigned int m_nBufSizeForSaveImage = stImageInfo.nWidth * stImageInfo.nHeight * 3;
-            unsigned char* m_pBufForSaveImage = srcImage.data;
-
-            //转换图像格式为BGR8
-            MV_CC_PIXEL_CONVERT_PARAM stConvertParam = { 0 };
-            memset(&stConvertParam, 0, sizeof(MV_CC_PIXEL_CONVERT_PARAM));
-            stConvertParam.nWidth = stImageInfo.nWidth;                 //ch:图像宽 | en:image width
-            stConvertParam.nHeight = stImageInfo.nHeight;               //ch:图像高 | en:image height
-            stConvertParam.pSrcData = pData0;                  //ch:输入数据缓存 | en:input data buffer
-            stConvertParam.nSrcDataLen = stImageInfo.nFrameLen;         //ch:输入数据大小 | en:input data size
-
-            stConvertParam.enSrcPixelType = stImageInfo.enPixelType;    //ch:输入像素格式 | en:input pixel format
-            stConvertParam.enDstPixelType = PixelType_Gvsp_BGR8_Packed; //ch:输出像素格式 | en:output pixel format  适用于OPENCV的图像格式
-            //stConvertParam.enDstPixelType = PixelType_Gvsp_RGB8_Packed; //ch:输出像素格式 | en:output pixel format
-            stConvertParam.pDstBuffer = m_pBufForSaveImage;                    //ch:输出数据缓存 | en:output data buffer
-            stConvertParam.nDstBufferSize = m_nBufSizeForSaveImage;            //ch:输出缓存大小 | en:output buffer size
-            //testflag.store(true, std::memory_order::memory_order_seq_cst);
-            //for (int i = 0; i < 300; i++)
-            // {
-            //QThread::msleep(100);
-            MV_CC_ConvertPixelType(CurrentCamera->handle, &stConvertParam);
-            //}
-            //testflag.store(false, std::memory_order::memory_order_seq_cst);
-        }
-        if (srcImage.empty())
-        {
-            srcImage = cv::Mat(5, 5, CV_8UC1).setTo(0);
-        }
-
-    }
-    if (CurrentCamera->triggerMode.load(std::memory_order::memory_order_acquire) == 0)
-    {
-        CurrentCamera->triggerOffBack(srcImage);
+    if (pFrameInfo0 == nullptr || pData0 == nullptr || CurrentCamera == nullptr)
         return;
-    }
-    //if (CurrentCamera->allowflag.load(std::memory_order::memory_order_acquire))
+
+    if (CurrentCamera->triggerMode.load(std::memory_order::memory_order_acquire) == 1
+        && CurrentCamera->m_MV_CAM_TRIGGER_SOURCE != MV_TRIGGER_SOURCE_SOFTWARE)
     {
+        if (pFrameInfo0->nFrameLen > static_cast<unsigned int>(std::numeric_limits<int>::max()))
+        {
+            qWarning() << "frame len too large" << pFrameInfo0->nFrameLen;
+            return;
+        }
+
+        const int callbackIndex = CurrentCamera->Currentindex;
+        const quint64 generation = CurrentCamera->AsyncCallbackGeneration.load(std::memory_order_acquire);
+        QByteArray rawFrameData(reinterpret_cast<const char*>(pData0), static_cast<int>(pFrameInfo0->nFrameLen));
+        CurrentCamera->enqueueAsyncCallback(callbackIndex, generation, CurrentCamera->handle, *pFrameInfo0, rawFrameData);
+        qDebug() << callbackIndex << "图像已入异步队列" << pFrameInfo0->nFrameLen;
+    }
+    else
+    {
+        if (pFrameInfo0)
+        {
+            //获取的是单通道灰度图
+            auto& stImageInfo = *pFrameInfo0;
+            if (pFrameInfo0->enPixelType == PixelType_Gvsp_Mono8)//获取当前采集到的图像格式
+            {
+                srcImage = cv::Mat(pFrameInfo0->nHeight, pFrameInfo0->nWidth, CV_8UC1, pData0);
+            }
+            //获取的是RGB8图
+            else if (pFrameInfo0->enPixelType == PixelType_Gvsp_BGR8_Packed)
+            {
+                srcImage = cv::Mat(pFrameInfo0->nHeight, pFrameInfo0->nWidth, CV_8UC3, pData0);
+            }
+            else if (IsColor(pFrameInfo0->enPixelType)) //其它格式彩色图
+            {
+                srcImage = cv::Mat(stImageInfo.nHeight, stImageInfo.nWidth, CV_8UC3);
+
+                unsigned int m_nBufSizeForSaveImage = stImageInfo.nWidth * stImageInfo.nHeight * 3;
+                unsigned char* m_pBufForSaveImage = srcImage.data;
+
+                //转换图像格式为BGR8
+                MV_CC_PIXEL_CONVERT_PARAM stConvertParam = { 0 };
+                memset(&stConvertParam, 0, sizeof(MV_CC_PIXEL_CONVERT_PARAM));
+                stConvertParam.nWidth = stImageInfo.nWidth;                 //ch:图像宽 | en:image width
+                stConvertParam.nHeight = stImageInfo.nHeight;               //ch:图像高 | en:image height
+                stConvertParam.pSrcData = pData0;                  //ch:输入数据缓存 | en:input data buffer
+                stConvertParam.nSrcDataLen = stImageInfo.nFrameLen;         //ch:输入数据大小 | en:input data size
+
+                stConvertParam.enSrcPixelType = stImageInfo.enPixelType;    //ch:输入像素格式 | en:input pixel format
+                stConvertParam.enDstPixelType = PixelType_Gvsp_BGR8_Packed; //ch:输出像素格式 | en:output pixel format  适用于OPENCV的图像格式
+                stConvertParam.pDstBuffer = m_pBufForSaveImage;                    //ch:输出数据缓存 | en:output data buffer
+                stConvertParam.nDstBufferSize = m_nBufSizeForSaveImage;            //ch:输出缓存大小 | en:output buffer size
+                MV_CC_ConvertPixelType(CurrentCamera->handle, &stConvertParam);
+            }
+            if (srcImage.empty())
+            {
+                srcImage = cv::Mat(5, 5, CV_8UC1).setTo(0);
+            }
+        }
+        if (CurrentCamera->triggerMode.load(std::memory_order::memory_order_acquire) == 0)
+        {
+            if (CurrentCamera->triggerOffBack)
+                CurrentCamera->triggerOffBack(srcImage);
+            return;
+        }
         OutMats.push_back(srcImage.clone());
-        if (CurrentCamera->m_MV_CAM_TRIGGER_SOURCE == MV_TRIGGER_SOURCE_SOFTWARE)
-        {
-            if (CurrentCamera->allowflag.load(std::memory_order::memory_order_acquire))
-                CurrentCamera->MatQueue.push(OutMats);
-        }
-        else
-        {
-            const int callbackIndex = CurrentCamera->Currentindex;
-            qDebug() << callbackIndex << "图像数量" << OutMats.size();
-            ///硬触发不受开关控制，通过异步队列派发，避免外部回调阻塞 SDK 回调线程
-            CurrentCamera->enqueueAsyncCallback(callbackIndex, OutMats);
-        }
+        if (CurrentCamera->allowflag.load(std::memory_order::memory_order_acquire))
+            CurrentCamera->MatQueue.push(OutMats);
     }
     CurrentCamera->Currentindex++;
     if (CurrentCamera->exposureTimeMap.count(CurrentCamera->Currentindex) == 1)
@@ -304,14 +292,17 @@ void CameraFunSDKfactoryCls::stopAsyncCallbackWorker()
     }
 }
 
-void CameraFunSDKfactoryCls::enqueueAsyncCallback(int cameraIndex, const QList<cv::Mat>& images)
+void CameraFunSDKfactoryCls::enqueueAsyncCallback(int cameraIndex, quint64 generation, void* handleSnapshot, const MV_FRAME_OUT_INFO_EX& frameInfo, const QByteArray& rawFrameData)
 {
     if (!AsyncCallbackRunning.load(std::memory_order_acquire))
         return;
 
     AsyncCallbackTask task;
     task.cameraIndex = cameraIndex;
-    task.images = images;
+    task.generation = generation;
+    task.handleSnapshot = handleSnapshot;
+    task.frameInfo = frameInfo;
+    task.rawFrameData = rawFrameData;
     {
         std::lock_guard<std::mutex> lock(AsyncCallbackMutex);
         AsyncCallbackQueue.push_back(task);
@@ -336,6 +327,53 @@ void CameraFunSDKfactoryCls::asyncCallbackLoop()
             task = AsyncCallbackQueue.front();
             AsyncCallbackQueue.pop_front();
         }
+
+        if (task.generation != AsyncCallbackGeneration.load(std::memory_order_acquire))
+            continue;
+
+        cv::Mat srcImage = cv::Mat();
+        auto& stImageInfo = task.frameInfo;
+        unsigned char* rawData = reinterpret_cast<unsigned char*>(task.rawFrameData.data());
+        if (rawData != nullptr && !task.rawFrameData.isEmpty())
+        {
+            if (stImageInfo.enPixelType == PixelType_Gvsp_Mono8)
+            {
+                srcImage = cv::Mat(stImageInfo.nHeight, stImageInfo.nWidth, CV_8UC1, rawData).clone();
+            }
+            else if (stImageInfo.enPixelType == PixelType_Gvsp_BGR8_Packed)
+            {
+                srcImage = cv::Mat(stImageInfo.nHeight, stImageInfo.nWidth, CV_8UC3, rawData).clone();
+            }
+            else if (IsColor(stImageInfo.enPixelType))
+            {
+                srcImage = cv::Mat(stImageInfo.nHeight, stImageInfo.nWidth, CV_8UC3);
+                unsigned int m_nBufSizeForSaveImage = stImageInfo.nWidth * stImageInfo.nHeight * 3;
+                unsigned char* m_pBufForSaveImage = srcImage.data;
+
+                MV_CC_PIXEL_CONVERT_PARAM stConvertParam = { 0 };
+                memset(&stConvertParam, 0, sizeof(MV_CC_PIXEL_CONVERT_PARAM));
+                stConvertParam.nWidth = stImageInfo.nWidth;
+                stConvertParam.nHeight = stImageInfo.nHeight;
+                stConvertParam.pSrcData = rawData;
+                stConvertParam.nSrcDataLen = stImageInfo.nFrameLen;
+                stConvertParam.enSrcPixelType = stImageInfo.enPixelType;
+                stConvertParam.enDstPixelType = PixelType_Gvsp_BGR8_Packed;
+                stConvertParam.pDstBuffer = m_pBufForSaveImage;
+                stConvertParam.nDstBufferSize = m_nBufSizeForSaveImage;
+                if (MV_CC_ConvertPixelType(task.handleSnapshot, &stConvertParam) != MV_OK)
+                {
+                    qWarning() << "async convert pixel type failed" << task.cameraIndex;
+                    continue;
+                }
+            }
+        }
+        if (srcImage.empty())
+        {
+            srcImage = cv::Mat(5, 5, CV_8UC1).setTo(0);
+        }
+
+        QList<cv::Mat> callbackImages;
+        callbackImages.push_back(srcImage);
 
         CallbackFuncPack callbackPack;
         QStringList callbackKeys;
@@ -364,18 +402,18 @@ void CameraFunSDKfactoryCls::asyncCallbackLoop()
             continue;
         QObject* obj = callbackObject.data();
         obj->setProperty("cameraIndex", QString::number(task.cameraIndex));
-        callbackPack.GetimagescallbackFunc(obj, task.images);
+        callbackPack.GetimagescallbackFunc(obj, callbackImages);
     }
 }
 
 CameraFunSDKfactoryCls::~CameraFunSDKfactoryCls()
 {
+    stopAsyncCallbackWorker();
     if (handle != nullptr)
     {
         CloseDevice(handle);
         handle = nullptr;
     }
-    stopAsyncCallbackWorker();
 }
 
 bool CameraFunSDKfactoryCls::initSdk(QMap<QString, QString>& insideValuesMaps)

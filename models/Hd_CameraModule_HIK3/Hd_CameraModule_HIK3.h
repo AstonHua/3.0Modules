@@ -13,6 +13,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <deque>
+#include <limits>
 #include <mutex>
 #include <thread>
 #include "pbglobalobject.h"
@@ -25,8 +26,8 @@ using namespace std;
 #pragma execution_character_set("utf-8")
 struct CallbackFuncPack
 {
-    QObject* callbackparent;
-    PBGLOBAL_CALLBACK_FUN GetimagescallbackFunc;
+    QPointer<QObject> callbackparent;
+    PBGLOBAL_CALLBACK_FUN GetimagescallbackFunc = nullptr;
     QString cameraIndex;
 };
 class CameraFunSDKfactoryCls : public QObject
@@ -47,7 +48,10 @@ public:
     struct AsyncCallbackTask
     {
         int cameraIndex = 0;
-        QList<cv::Mat> images;
+        quint64 generation = 0;
+        void* handleSnapshot = nullptr;
+        MV_FRAME_OUT_INFO_EX frameInfo = {};
+        QByteArray rawFrameData;
     };
     std::mutex CallbackFuncMapMutex;
     std::mutex AsyncCallbackMutex;
@@ -55,9 +59,10 @@ public:
     std::deque<AsyncCallbackTask> AsyncCallbackQueue;
     std::thread AsyncCallbackWorker;
     std::atomic_bool AsyncCallbackRunning{false};
+    std::atomic<quint64> AsyncCallbackGeneration{0};
     void startAsyncCallbackWorker();
     void stopAsyncCallbackWorker();
-    void enqueueAsyncCallback(int cameraIndex, const QList<cv::Mat>& images);
+    void enqueueAsyncCallback(int cameraIndex, quint64 generation, void* handleSnapshot, const MV_FRAME_OUT_INFO_EX& frameInfo, const QByteArray& rawFrameData);
     void asyncCallbackLoop();
     std::atomic_bool allowflag{true};
      int IntNumEvent = 0;
