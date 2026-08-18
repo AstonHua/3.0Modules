@@ -98,46 +98,49 @@ static void onGetFrame(IMV_Frame* pFrame, void* pUser)
 	else /*if(IsColor(pFrame->frameInfo.pixelFormat))*/ //(pFrame->frameInfo.pixelFormat == gvspPixelRGB8 || pFrame->frameInfo.pixelFormat == gvspPixelYUV422_8_UYVY)
 	{
 		IMV_PixelConvertParam stPixelConvertParam;
-		unsigned char* pDstBuf = NULL;
-		unsigned int			nDstBufSize = 0;
+		//unsigned char* pDstBuf = NULL;
+		//unsigned int			nDstBufSize = 0;
 		int						ret = IMV_OK;
-		const char* pConvertFormatStr = NULL;
-		IMV_EPixelType temp = pFrame->frameInfo.pixelFormat;
-		if (IsColor(temp))
-		{
-			//cv::Mat src;
-			switch (temp)
-			{
-			case gvspPixelRGB8:
-				nDstBufSize = sizeof(unsigned char) * pFrame->frameInfo.width * pFrame->frameInfo.height * 3;
-				pConvertFormatStr = (const char*)"RGB8";
-				break;
+		//const char* pConvertFormatStr = NULL;
+		//IMV_EPixelType temp = pFrame->frameInfo.pixelFormat;
+		//if (IsColor(temp))
+		//{
+		//	//cv::Mat src;
+		//	switch (temp)
+		//	{
+		//	case gvspPixelRGB8:
+		//		nDstBufSize = sizeof(unsigned char) * pFrame->frameInfo.width * pFrame->frameInfo.height * 3;
+		//		pConvertFormatStr = (const char*)"RGB8";
+		//		break;
 
-			case gvspPixelBGR8:
-				nDstBufSize = sizeof(unsigned char) * pFrame->frameInfo.width * pFrame->frameInfo.height * 3;
+		//	case gvspPixelBGR8:
+		//		nDstBufSize = sizeof(unsigned char) * pFrame->frameInfo.width * pFrame->frameInfo.height * 3;
 
-				pConvertFormatStr = (const char*)"BGR8";
-				break;
-			case gvspPixelBGRA8:
-				nDstBufSize = sizeof(unsigned char) * pFrame->frameInfo.width * pFrame->frameInfo.height * 4;
+		//		pConvertFormatStr = (const char*)"BGR8";
+		//		break;
+		//	case gvspPixelBGRA8:
+		//		nDstBufSize = sizeof(unsigned char) * pFrame->frameInfo.width * pFrame->frameInfo.height * 4;
+		//		pConvertFormatStr = (const char*)"BGRA8";
+		//		break;
+		//	case gvspPixelMono8:
+  //          default:
+		//		nDstBufSize = sizeof(unsigned char) * pFrame->frameInfo.width * pFrame->frameInfo.height;
+		//		pConvertFormatStr = (const char*)"Mono8";
+  //              break;
+		//	}
 
-				pConvertFormatStr = (const char*)"BGRA8";
-				break;
-			case gvspPixelMono8:
-				nDstBufSize = sizeof(unsigned char) * pFrame->frameInfo.width * pFrame->frameInfo.height;
-				pConvertFormatStr = (const char*)"Mono8";
-				break;			
-			}
+		//	pDstBuf = (unsigned char*)malloc(nDstBufSize);
+		//	if (NULL == pDstBuf)
+		//	{
+		//		printf("malloc pDstBuf failed!\n");
+		//		return;
+		//	}
+		//}
 
-			pDstBuf = (unsigned char*)malloc(nDstBufSize);
-			if (NULL == pDstBuf)
-			{
-				printf("malloc pDstBuf failed!\n");
-				return;
-			}
-		}
+        srcImage = cv::Mat(pFrame->frameInfo.width, pFrame->frameInfo.height, CV_8UC3);
 
-
+        unsigned int m_nBufSizeForSaveImage = pFrame->frameInfo.width * pFrame->frameInfo.height * 3;
+        unsigned char* m_pBufForSaveImage = srcImage.data;
 		// 图像转换成BGR8
 		// convert image to BGR8
 		memset(&stPixelConvertParam, 0, sizeof(stPixelConvertParam));
@@ -150,43 +153,24 @@ static void onGetFrame(IMV_Frame* pFrame, void* pUser)
 		stPixelConvertParam.nPaddingY = pFrame->frameInfo.paddingY;
 		stPixelConvertParam.eBayerDemosaic = demosaicNearestNeighbor;
 		stPixelConvertParam.eDstPixelFormat = gvspPixelBGR8;
-		stPixelConvertParam.pDstBuf = pDstBuf;
-		stPixelConvertParam.nDstBufSize = nDstBufSize;
+		stPixelConvertParam.pDstBuf = m_pBufForSaveImage;
+		stPixelConvertParam.nDstBufSize = m_nBufSizeForSaveImage;
 
 		ret = IMV_PixelConvert(currentUser->handle, &stPixelConvertParam);
-		if (IMV_OK == ret)
+		/*if (IMV_OK == ret)
 		{
-			cv::Mat src = cv::Mat(pFrame->frameInfo.height, pFrame->frameInfo.width, CV_8UC3, (uint8_t*)stPixelConvertParam.pDstBuf);
-			srcImage = src.clone();
-			printf("image convert to %s successfully! nDstDataLen (%u)\n",
-				pConvertFormatStr, stPixelConvertParam.nDstBufSize);
-			//hFile = fopen(pFileName, "wb");
-			//if (hFile != NULL)
-			//{
-			//    fwrite((void*)pDstBuf, 1, stPixelConvertParam.nDstBufSize, hFile);
-			//    fclose(hFile);
-			//}
-			//else
-			//{
-			//    // 如果打开失败，请用管理权限执行
-			//    // If opefailed, Run as Administrator
-			//    printf("Open file (%s) failed!\n", pFileName);
-			//}
+            srcImage = cv::Mat(pFrame->frameInfo.height, pFrame->frameInfo.width, CV_8UC3, (uint8_t*)stPixelConvertParam.pDstBuf);
 		}
 		else
 		{
+            srcImage = cv::Mat(pFrame->frameInfo.height, pFrame->frameInfo.width, CV_8UC3 , (uint8_t*)stPixelConvertParam.pDstBuf);
+		}*/
 
-			cv::Mat src = cv::Mat(pFrame->frameInfo.height, pFrame->frameInfo.width, CV_8UC3 , (uint8_t*)stPixelConvertParam.pDstBuf);
-			srcImage = src.clone();
-
-			printf("image convert to %s failed! ErrorCode[%d]\n", pConvertFormatStr, ret);
-		}
-
-		if (pDstBuf)
+		/*if (pDstBuf)
 		{
 			free(pDstBuf);
 			pDstBuf = NULL;
-		}
+		}*/
 
 	}
 
