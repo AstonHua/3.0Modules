@@ -1,9 +1,11 @@
-﻿#ifndef Hd_CameraModule_DaHua3_H
+#ifndef Hd_CameraModule_DaHua3_H
 #define Hd_CameraModule_DaHua3_H
 
 #include <QtCore/qglobal.h>
 
+#include<opencv2/opencv.hpp>
 #include <QByteArray>
+#include <QDebug>
 #include <iostream>
 #include <Windows.h>
 #include <QDateTime>
@@ -19,6 +21,9 @@
 #include "IMVApi.h"
 #include <time.h>
 #include <struct.h>
+#include <AlgParm.h>
+#include <dmessagebox.h>
+#include <CameraParams.h>
 using namespace cv;
 using namespace  std;
 
@@ -29,32 +34,54 @@ struct CallbackFuncPack
     PBGLOBAL_CALLBACK_FUN GetimagescallbackFunc;
     QString cameraIndex;
 };
+
 class CameraFunSDKfactoryCls : public QObject
 {
+    typedef std::function<void(cv::Mat&)> GetImageFun;
     Q_OBJECT
 public:
     explicit CameraFunSDKfactoryCls(QString Sn, QString path, QObject* parent = nullptr);
     ~CameraFunSDKfactoryCls();
+    int FindCameraIndexBySN(const std::string& targetSN);
     bool initSdk(QMap<QString, QString>& insideValuesMaps);
-    void* getHandle() const { return devHandle; }
-    void upDateParam() {};
-    IMV_HANDLE devHandle = NULL;//相机句柄
-    ThreadSafeQueue<cv::Mat> MatQueue;
-    QVector<CallbackFuncPack> CallbackFuncVec;
-    std::atomic_bool allowflag;
+    void* getHandle() const { return handle; }
+    void upDateParam();
+    bool setArrayByte(QString Key, QJsonArray);
+    IMV_HANDLE handle = NULL;//相机句柄
+    ThreadSafeQueue<QList<cv::Mat>> MatQueue;
+    QMap<int, CallbackFuncPack> CallbackFuncMap;
+    std::atomic_bool allowflag = true;
     int Currentindex = 0;
+    int getImageMaxCoiunts = 1;//一次信号取图次数
+    int OnceGetImageNum = 1;//一次取图出图数量
+    int timeOut = 1000;
+    void registerGetImageFun(GetImageFun fun) { triggerOffBack = fun; }
     string Username;
     string SnCode;
     QString RootPath;
+    std::map<int, float> exposureTimeMap;
+    std::map<int, float> gainMap;
+    std::map<int, float> gammaMap;
     QMap<QString, QString> ParasValueMap;
     _IMV_String triggerType;//0,SoftWare;2,Line1;3,Line2;9,Line1andLine2
-    //MV_CAM_TRIGGER_SOURCE m_MV_CAM_TRIGGER_SOURCE;//触发方式
+    MV_CAM_TRIGGER_SOURCE m_MV_CAM_TRIGGER_SOURCE;//触发方式
+    GetImageFun triggerOffBack;
+    std::atomic_int triggerMode{0};//触发模式 0关闭 1打开
+    struct ParamItem
+    {
+        float exposure = 0;
+        float gain = 0;
+        float gamma = 0;
+    };
+    QVector<ParamItem> paramCycleList;
+    int setDataCycleIndex = 0;
+    void syncParamCycleList();
 signals:
     void trigged(int);
-
 };
 class  Hd_CameraModule_DaHua3 :public PbGlobalObject
 {
+    Q_OBJECT
 public:
     Hd_CameraModule_DaHua3(QString sn, QString path, int settype = -1, QObject* parent = nullptr);
      ~Hd_CameraModule_DaHua3();
@@ -70,13 +97,16 @@ public:
     void registerCallBackFun(PBGLOBAL_CALLBACK_FUN, QObject*, const QString&);
     //注销回调 string对应自身的参数协议 （自定义）--->注销后还得取消连接状态
     void cancelCallBackFun(PBGLOBAL_CALLBACK_FUN, QObject*, const QString&);
-
-private:
+    QString GetRootPath() const { return RootPath; }
+    QString GetSn() const { return Sncode; }
     QString Sncode;
     QString RootPath;
     QString JsonFilePath;
-    shared_ptr<CameraFunSDKfactoryCls> m_sdkFunc;
+    CameraFunSDKfactoryCls* m_sdkFunc = nullptr;
     QMap<QString, QString> ParasValueMap;
+
+signals:
+    void sendMats(cv::Mat);
 };
 
 class mPrivateWidget :public QWidget
@@ -86,10 +116,55 @@ public:
     mPrivateWidget(void*);
     ~mPrivateWidget() {};
     void InitWidget();
-    QPushButton* SetDataBtn;
-    ImageViewer* m_showimage;
     Hd_CameraModule_DaHua3* m_Camerahandle = nullptr;
+    void getRes(QByteArray);
+private:
+    void createConnect();
+    void showImage(cv::Mat& image);
+    QGridLayout* layout = nullptr;
+    QJsonObject BytePtr;
 
+    QPushButton* SetDataBtn = nullptr;
+    QPushButton* ContinuesBtn = nullptr;
+    QPushButton* Details = nullptr;
+
+    QComboBox* first = nullptr; //触发模式
+    QComboBox* Second = nullptr;//触发源
+    QComboBox* BalanceWhiteAuto = nullptr;//自动白平衡开关
+    QSpinBox* BalanceRatioR = nullptr;
+    QSpinBox* BalanceRatioG = nullptr;
+    QSpinBox* BalanceRatioB = nullptr;
+    QComboBox* GamaDisable = nullptr;
+    QSpinBox* Count = nullptr;//一次信号取图次数
+    QSpinBox* timeout = nullptr;//单张图超时时间
+    viewWidget* m_showimage = nullptr;
+    QLineEdit* gain = nullptr;
+    QLineEdit* Gama = nullptr;
+    QLineEdit* Exposure = nullptr;
+    QPushButton* saveBtn = nullptr;
+
+    MyTableWidget* gainTable = nullptr;
+    MyTableWidget* GamaTable = nullptr;
+    MyTableWidget* ExposureTimeTable = nullptr;
+
+    QPushButton* Add = nullptr;
+    QPushButton* Delete = nullptr;
+    QPushButton* takeEffect = nullptr;
+    QTableWidget* showTable = nullptr;
+    AlgParmWidget* m_AlgParmWidget = nullptr;
+
+    QDoubleValidator* doubleValidator1 = nullptr;
+    QDoubleValidator* doubleValidator2 = nullptr;
+    QDoubleValidator* doubleValidator3 = nullptr;
+
+    float gainMin, gainMax;
+    float ExposureMin, ExposureMax;
+    float GamaMin, GamaMax;
+
+    QMap<QPair<int, int>, QString> cellOriginalValues;
+    QList<int> BalanceRatioLst = { 100,200,300 };
+signals:
+    void sendImage(QImage);
 };
 
 extern "C"

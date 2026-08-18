@@ -68,7 +68,7 @@ compile_commands.json
 *.7z
 *.tar.gz
 
-
+.svn/
 env/
 bin/
 out/

@@ -91,7 +91,10 @@ bool connctDevice(string GetSnName, void* handle, void* pUser)
     MV_CC_CreateHandle(&handle, m_stDevList.pDeviceInfo[index]);
     int nRet = MV_CC_OpenDevice(handle);
     if (MV_OK != nRet)
+    {
+        MV_CC_DestroyHandle(handle);
         return false;
+    }
     ////触发模式
     //MV_CC_SetEnumValue(handle, "TriggerSource", MV_TRIGGER_SOURCE_LINE0);
     MV_CC_SetEnumValue(handle, "TriggerMode", MV_TRIGGER_MODE_ON);
@@ -106,13 +109,22 @@ bool connctDevice(string GetSnName, void* handle, void* pUser)
 
     nRet = MV_CC_RegisterImageCallBackEx(handle, ImageCallBackEx, CurrentCamera);//注册回调
     if (MV_OK != nRet)
+    {
+        CloseDevice(handle);
         return false;
+    }
     nRet = MV_CC_RegisterExceptionCallBack(handle, ReconnectDevice, CurrentCamera);//断线重连
     if (MV_OK != nRet)
+    {
+        CloseDevice(handle);
         return false;
+    }
     nRet = MV_CC_SetImageNodeNum(handle, (unsigned int)CurrentCamera->getImageMaxCoiunts);
     if (MV_OK != nRet)
+    {
+        CloseDevice(handle);
         return false;
+    }
 
     // ch:开启Event | en:Set Event of FrameStart On
     nRet = MV_CC_SetEnumValueByString(handle, "EventSelector", "FrameStart");
@@ -149,22 +161,33 @@ void __stdcall ReconnectDevice(unsigned int nMsgType, void* pUser)
     emit CurrentCamera->trigged(1);
     if (nMsgType == MV_EXCEPTION_DEV_DISCONNECT)
     {
-        //断开连接
+        // 先递增 generation，让 async worker 丢弃所有旧任务，
+        // 避免 worker 线程在 handle 销毁后通过 handleSnapshot 访问已释放的 handle
+        CurrentCamera->AsyncCallbackGeneration.fetch_add(1, std::memory_order_acq_rel);
+
+        // 等待 worker 线程消费完旧 generation 的任务（give worker a chance to drain）
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+        // 断开连接 — 此时 worker 已丢弃旧 generation 的任务，handle 可以安全销毁
         MV_CC_CloseDevice(CurrentCamera->handle);
         int nRet = MV_CC_DestroyHandle(CurrentCamera->handle);
         CurrentCamera->handle = nullptr;
-        BOOL bConnected = FALSE;
-        while (1)
+
+        constexpr int MAX_RETRY_COUNT = 300; // 30秒上限，防止永久阻塞
+        int retryCount = 0;
+        while (retryCount < MAX_RETRY_COUNT)
         {
             Sleep(100);
+            retryCount++;
             if (connctDevice(CurrentCamera->SnCode, CurrentCamera->handle, CurrentCamera) == true)
             {
                 qWarning() << "[Hd_CameraModule_HIK] " << "  Hd_CameraModule_HIK create success again! ";
                 emit CurrentCamera->trigged(0);
-                break;
+                return;
             }
-
         }
+        qCritical() << "[Hd_CameraModule_HIK] " << "  Reconnect failed after " << MAX_RETRY_COUNT
+                    << " attempts, giving up! Camera:" << QString::fromStdString(CurrentCamera->SnCode);
     }
 }
 
@@ -652,7 +675,10 @@ bool create(const QString& DeviceSn, const QString& name, const QString& path)
     OnePb temp;
     temp.base = new Hd_CameraModule_HIK3(DeviceSn, path + "/Hd_CameraModule_HIK3/");
     if (!temp.base->init())
+    {
+        delete temp.base;
         return false;
+    }
     temp.baseWidget = new mPrivateWidget(temp.base);
     temp.DeviceSn = DeviceSn;
     TotalMap.insert(name.split(':').first(), temp);
