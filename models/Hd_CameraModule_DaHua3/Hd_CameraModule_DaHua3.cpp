@@ -71,12 +71,22 @@ bool IsColor(IMV_EPixelType enType)
 static void onGetFrame(IMV_Frame* pFrame, void* pUser)
 {
 	double time_Start = (double)clock();
-	if (pFrame == NULL)
+	if (pFrame == NULL || pUser == NULL)
 	{
-		printf("pFrame is NULL\n");
+		printf("pFrame or pUser is NULL\n");
 		return;
 	}
 	CameraFunSDKfactoryCls* currentUser = reinterpret_cast<CameraFunSDKfactoryCls*>(pUser);
+	if (currentUser == nullptr)
+	{
+		printf("currentUser is NULL\n");
+		return;
+	}
+	if (currentUser->handle == NULL)
+	{
+		qWarning() << "onGetFrame: camera handle is NULL";
+		return;
+	}
 
 	int inputIndex = 0;
 	//IMV_EPixelType convertFormat = gvspPixelMono8;
@@ -98,45 +108,9 @@ static void onGetFrame(IMV_Frame* pFrame, void* pUser)
 	else /*if(IsColor(pFrame->frameInfo.pixelFormat))*/ //(pFrame->frameInfo.pixelFormat == gvspPixelRGB8 || pFrame->frameInfo.pixelFormat == gvspPixelYUV422_8_UYVY)
 	{
 		IMV_PixelConvertParam stPixelConvertParam;
-		//unsigned char* pDstBuf = NULL;
-		//unsigned int			nDstBufSize = 0;
+
 		int						ret = IMV_OK;
-		//const char* pConvertFormatStr = NULL;
-		//IMV_EPixelType temp = pFrame->frameInfo.pixelFormat;
-		//if (IsColor(temp))
-		//{
-		//	//cv::Mat src;
-		//	switch (temp)
-		//	{
-		//	case gvspPixelRGB8:
-		//		nDstBufSize = sizeof(unsigned char) * pFrame->frameInfo.width * pFrame->frameInfo.height * 3;
-		//		pConvertFormatStr = (const char*)"RGB8";
-		//		break;
-
-		//	case gvspPixelBGR8:
-		//		nDstBufSize = sizeof(unsigned char) * pFrame->frameInfo.width * pFrame->frameInfo.height * 3;
-
-		//		pConvertFormatStr = (const char*)"BGR8";
-		//		break;
-		//	case gvspPixelBGRA8:
-		//		nDstBufSize = sizeof(unsigned char) * pFrame->frameInfo.width * pFrame->frameInfo.height * 4;
-		//		pConvertFormatStr = (const char*)"BGRA8";
-		//		break;
-		//	case gvspPixelMono8:
-  //          default:
-		//		nDstBufSize = sizeof(unsigned char) * pFrame->frameInfo.width * pFrame->frameInfo.height;
-		//		pConvertFormatStr = (const char*)"Mono8";
-  //              break;
-		//	}
-
-		//	pDstBuf = (unsigned char*)malloc(nDstBufSize);
-		//	if (NULL == pDstBuf)
-		//	{
-		//		printf("malloc pDstBuf failed!\n");
-		//		return;
-		//	}
-		//}
-
+		
         srcImage = cv::Mat(pFrame->frameInfo.width, pFrame->frameInfo.height, CV_8UC3);
 
         unsigned int m_nBufSizeForSaveImage = pFrame->frameInfo.width * pFrame->frameInfo.height * 3;
@@ -180,7 +154,9 @@ static void onGetFrame(IMV_Frame* pFrame, void* pUser)
 	}
     if (currentUser->triggerMode.load(std::memory_order::memory_order_acquire) == 0)
     {
-        currentUser->triggerOffBack(srcImage);
+        // 防呆：连续模式回调可能未注册，直接调用会空函数指针崩溃
+        if (currentUser->triggerOffBack)
+            currentUser->triggerOffBack(srcImage);
         return;
     }
 	//if (currentUser->allowflag.load(std::memory_order::memory_order_acquire))
@@ -253,60 +229,77 @@ static void onGetFrame(IMV_Frame* pFrame, void* pUser)
 
 // 断线通知处理
 // offLine notify processing
-static void deviceOffLine(IMV_HANDLE handle)
+static void deviceOffLine(CameraFunSDKfactoryCls* currentUser, IMV_HANDLE handle)
 {
-	// 停止拉流 
-	// Stop grabbing 
+	if (NULL == handle)
+	{
+		qWarning() << "deviceOffLine: handle is NULL";
+		return;
+	}
+
+	// 停止拉流
+	// Stop grabbing
 	IMV_StopGrabbing(handle);
 
-	return;
+	Q_UNUSED(currentUser);   // 保留 pUser 贯穿，便于后续扩展；信号语义见 M11 遗留说明
 }
 
 // 上线通知处理
 // onLine notify processing
-static void deviceOnLine(IMV_HANDLE handle)
+static void deviceOnLine(CameraFunSDKfactoryCls* currentUser, IMV_HANDLE handle)
 {
+	if (NULL == handle)
+	{
+		qWarning() << "deviceOnLine: handle is NULL";
+		return;
+	}
+
 	int ret = IMV_OK;
 
 	// 关闭相机
-	// Close camera 
+	// Close camera
 	IMV_Close(handle);
 
-	do
+	// 限次重试，防止相机永久离线时死循环阻塞 SDK 通知线程
+	constexpr int MAX_OPEN_RETRY_COUNT = 30;
+	int retryCount = 0;
+	while (retryCount < MAX_OPEN_RETRY_COUNT)
 	{
-
 		ret = IMV_Open(handle);
-		if (IMV_OK != ret)
-		{
-			printf("Retry open camera failed! ErrorCode[%d]\n", ret);
-		}
-		else
+		if (IMV_OK == ret)
 		{
 			printf("Retry open camera successfully!\n");
 			break;
 		}
-
+		printf("Retry open camera failed! ErrorCode[%d]\n", ret);
 		Sleep(500);
+		retryCount++;
+	}
 
-	} while (true);
+	if (ret != IMV_OK)
+	{
+		qCritical() << "deviceOnLine: reopen camera failed after" << retryCount
+					<< "attempts, giving up!";
+		return;
+	}
 
-	// 重新设备连接状态事件回调函数
+	// 重新注册设备连接状态事件回调函数（pUser 必须与首次注册一致，传 CameraFunSDKfactoryCls*）
 	// Device connection status event callback function again
-	ret = IMV_SubscribeConnectArg(handle, onDeviceLinkNotify, handle);
+	ret = IMV_SubscribeConnectArg(handle, onDeviceLinkNotify, currentUser);
 	if (IMV_OK != ret)
 	{
 		printf("SubscribeConnectArg failed! ErrorCode[%d]\n", ret);
 	}
 
-	// 重新注册数据帧回调函数
+	// 重新注册数据帧回调函数（pUser 必须传 currentUser，否则 onGetFrame 内空指针崩溃）
 	// Register data frame callback function again
-	ret = IMV_AttachGrabbing(handle, onGetFrame, NULL);
+	ret = IMV_AttachGrabbing(handle, onGetFrame, currentUser);
 	if (IMV_OK != ret)
 	{
 		printf("Attach grabbing failed! ErrorCode[%d]\n", ret);
 	}
 
-	// 开始拉流 
+	// 开始拉流
 	// Start grabbing
 	ret = IMV_StartGrabbing(handle);
 	if (IMV_OK != ret)
@@ -317,23 +310,37 @@ static void deviceOnLine(IMV_HANDLE handle)
 	{
 		printf("Start grabbing successfully\n");
 	}
-
 }
 
 // 连接事件通知回调函数
 // Connect event notify callback function
 static void onDeviceLinkNotify(const IMV_SConnectArg* pConnectArg, void* pUser)
 {
-	int ret = IMV_OK;
-	IMV_DeviceInfo devInfo;
-	IMV_HANDLE handle = (IMV_HANDLE)pUser;
-
-	if (NULL == handle)
+	if (nullptr == pConnectArg)
 	{
-		printf("handle is NULL!");
+		qWarning() << "onDeviceLinkNotify: pConnectArg is NULL";
 		return;
 	}
 
+	// pUser 统一为 CameraFunSDKfactoryCls*（首次注册与重连注册保持一致），
+	// 严禁把 SDK handle 直接当 pUser 传递（类型混淆会导致野指针崩溃）
+	CameraFunSDKfactoryCls* currentUser =
+		reinterpret_cast<CameraFunSDKfactoryCls*>(pUser);
+	if (currentUser == nullptr)
+	{
+		qWarning() << "onDeviceLinkNotify: pUser is NULL";
+		return;
+	}
+
+	IMV_HANDLE handle = currentUser->handle;
+	if (NULL == handle)
+	{
+		qWarning() << "onDeviceLinkNotify: camera handle is NULL";
+		return;
+	}
+
+	IMV_DeviceInfo devInfo;
+	int ret = IMV_OK;
 	memset(&devInfo, 0, sizeof(devInfo));
 	ret = IMV_GetDeviceInfo(handle, &devInfo);
 	if (IMV_OK != ret)
@@ -343,18 +350,18 @@ static void onDeviceLinkNotify(const IMV_SConnectArg* pConnectArg, void* pUser)
 	}
 
 	// 断线通知
-	// offLine notify 
+	// offLine notify
 	if (offLine == pConnectArg->event)
 	{
 		printf("------cameraKey[%s] : OffLine------\n", devInfo.cameraKey);
-		deviceOffLine(handle);
+		deviceOffLine(currentUser, handle);
 	}
 	// 上线通知
-	// onLine notify 
+	// onLine notify
 	else if (onLine == pConnectArg->event)
 	{
 		printf("------cameraKey[%s] : OnLine------\n", devInfo.cameraKey);
-		deviceOnLine(handle);
+		deviceOnLine(currentUser, handle);
 	}
 }
 
@@ -574,16 +581,26 @@ bool CameraFunSDKfactoryCls:: initSdk(QMap<QString, QString>& insideValuesMaps)
     ret = IMV_CreateHandle(&handle, modeByIndex, &devIndex);
 	if (IMV_OK != ret)
 	{
-		qWarning() << ("Create handle failed! ErrorCode[%d]\n", ret);
+		qWarning() << "Create handle failed! ErrorCode[" << ret << "]";
+		handle = NULL;
 		return false;
 	}
 
-	// 打开相机 
-	// Open camera 
+	// 失败统一收尾：停止拉流 → 关闭 → 销毁句柄并置空，避免句柄泄漏与悬垂
+	auto cleanupOnFail = [&]() {
+		IMV_StopGrabbing(handle);
+		IMV_Close(handle);
+		IMV_DestroyHandle(handle);
+		handle = NULL;
+	};
+
+	// 打开相机
+	// Open camera
 	ret = IMV_Open(handle);
 	if (IMV_OK != ret)
 	{
-		qWarning() << ("Open camera failed! ErrorCode[%d]\n", ret);
+		qWarning() << "Open camera failed! ErrorCode[" << ret << "]";
+		cleanupOnFail();
 		return false;
 	}
 	// 设备连接状态事件回调函数
@@ -591,7 +608,8 @@ bool CameraFunSDKfactoryCls:: initSdk(QMap<QString, QString>& insideValuesMaps)
 	ret = IMV_SubscribeConnectArg(handle, onDeviceLinkNotify, this);
 	if (IMV_OK != ret)
 	{
-		qWarning() << ("SubscribeConnectArg failed! ErrorCode[%d]\n", ret);
+		qWarning() << "SubscribeConnectArg failed! ErrorCode[" << ret << "]";
+		cleanupOnFail();
 		return false;
 	}
     //IMV_SetEnumFeatureValue(handle, "TriggerMode", MV_TRIGGER_MODE_ON);
@@ -599,7 +617,8 @@ bool CameraFunSDKfactoryCls:: initSdk(QMap<QString, QString>& insideValuesMaps)
     ret = IMV_ExecuteCommandFeature(handle, "UserSetLoad");
     if (IMV_OK != ret)
     {
-        qWarning() << ("SubscribeConnectArg failed! ErrorCode[%d]\n", ret);
+        qWarning() << "UserSetLoad failed! ErrorCode[" << ret << "]";
+        cleanupOnFail();
         return false;
     }
 
@@ -610,16 +629,18 @@ bool CameraFunSDKfactoryCls:: initSdk(QMap<QString, QString>& insideValuesMaps)
 	ret = IMV_AttachGrabbing(handle, onGetFrame, this);
 	if (IMV_OK != ret)
 	{
-		qWarning() << ("Attach grabbing failed! ErrorCode[%d]\n", ret);
+		qWarning() << "Attach grabbing failed! ErrorCode[" << ret << "]";
+		cleanupOnFail();
 		return false;
 	}
 
-	// 开始拉流 
-	// Start grabbing 
+	// 开始拉流
+	// Start grabbing
 	ret = IMV_StartGrabbing(handle);
 	if (IMV_OK != ret)
 	{
-		qWarning() << ("Start grabbing failed! ErrorCode[%d]\n", ret);
+		qWarning() << "Start grabbing failed! ErrorCode[" << ret << "]";
+		cleanupOnFail();
 		return false;
 	}
 
@@ -630,9 +651,10 @@ bool CameraFunSDKfactoryCls:: initSdk(QMap<QString, QString>& insideValuesMaps)
 
 void CameraFunSDKfactoryCls::upDateParam()
 {
-    getImageMaxCoiunts = ParasValueMap.value("OnceSignalsGetImageCounts").toInt();
+    // 防呆：取图次数下限为 1、超时下限 10ms（OnceGetImageNum 已有 qMax 保护）
+    getImageMaxCoiunts = qMax(ParasValueMap.value("OnceSignalsGetImageCounts").toInt(), 1);
     OnceGetImageNum = qMax(ParasValueMap.value("OnceImageCounts").toInt(), 1);
-    timeOut = ParasValueMap.value("GetOnceImageTimes").toInt();
+    timeOut = qMax(ParasValueMap.value("GetOnceImageTimes").toInt(), 10);
 
     qDebug() << getImageMaxCoiunts << OnceGetImageNum;
     return;
@@ -716,6 +738,7 @@ bool Hd_CameraModule_DaHua3::setData(const std::vector<cv::Mat>& mats, const QSt
 	Q_UNUSED(mats);
 	if (mats.empty() && data.isEmpty())
 	{
+        m_sdkFunc->MatQueue.clear();
         m_sdkFunc->syncParamCycleList();
         if (!m_sdkFunc->paramCycleList.isEmpty())
         {
@@ -802,7 +825,11 @@ bool create(const QString& DeviceSn, const QString& name, const QString& path)
     OnePb temp;
     temp.base = new Hd_CameraModule_DaHua3(DeviceSn, path + "/Hd_CameraModule_DaHua3/");
     if (!temp.base->init())
+    {
+        delete temp.base;
         return false;
+    }
+
     temp.baseWidget = new mPrivateWidget(temp.base);
     temp.DeviceSn = DeviceSn;
     TotalMap.insert(name.split(':').first(), temp);

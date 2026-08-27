@@ -117,6 +117,9 @@ public:
 
 signals:
     void sendMats(cv::Mat);
+
+private slots:
+		void Gettrigged(int);
 };
 extern "C"
 {

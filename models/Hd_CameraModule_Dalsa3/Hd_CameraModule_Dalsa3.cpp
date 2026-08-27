@@ -396,7 +396,10 @@ static void XferCallback(SapXferCallbackInfo* pInfo)
 	}
 
 	pCam->Currentindex++;
-	if (pCam->Currentindex >= pCam->getImageMaxCoiunts / pCam->OnceGetImageNum)
+	// 防呆：除数为 0 时按 1 处理，避免抓图回调内除零崩溃；getImageMaxCoiunts 为 0 时禁止轮转
+	const int divisor = qMax(pCam->OnceGetImageNum, 1);
+	if (pCam->getImageMaxCoiunts > 0
+		&& pCam->Currentindex >= pCam->getImageMaxCoiunts / divisor)
 	{
 		pCam->Currentindex = 0;
 	}
@@ -478,9 +481,10 @@ QMap<QString, QString> Hd_CameraModule_Dalsa3::parameters()
 }
 bool Hd_CameraModule_Dalsa3::setParameter(const QMap<QString, QString>& ParameterMap)
 {
-	timeOut = ParameterMap.value("GetOnceImageTimes").toInt();
-	OnceGetImageNum = ParameterMap.value("OnceImageCounts").toInt();
-	getImageMaxCoiunts = ParameterMap.value("OnceSignalsGetImageCounts").toInt();
+	// 防呆：取图次数/出图数量下限为 1、超时下限 10ms，避免回调内除零（SIGFPE）与立即超时
+	timeOut = qMax(ParameterMap.value("GetOnceImageTimes").toInt(), 10);
+	OnceGetImageNum = qMax(ParameterMap.value("OnceImageCounts").toInt(), 1);
+	getImageMaxCoiunts = qMax(ParameterMap.value("OnceSignalsGetImageCounts").toInt(), 1);
 	configFilename = ParameterMap.value("configFilename");
 	type1 = ParameterMap.value("TriggerMode").toInt();
 
